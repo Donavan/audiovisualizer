@@ -20,9 +20,9 @@ from audiovisualizer import AudioVisualOverlay
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Path to your video and assets with corrected paths
-VIDEO_PATH = os.path.join(BASE_DIR, "input_video.mp4")
-LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
-OUTPUT_PATH = os.path.join(BASE_DIR, "federation_records_output.mp4")
+VIDEO_PATH = os.path.join(BASE_DIR, "examples/test_assets/input_video.mp4")
+LOGO_PATH = os.path.join(BASE_DIR, "examples/test_assets/logo.png")
+OUTPUT_PATH = os.path.join(BASE_DIR, "/output/federation_records_demo.mp4")
 
 # Define cache directory for storing audio features
 CACHE_DIR = os.path.join(BASE_DIR, "cache")
@@ -140,8 +140,8 @@ def verify_and_fix_logo(logo_path):
         return logo_path  # Return original path as fallback
 
 def main():
-    FEDERATION_FONT = os.path.join(BASE_DIR, "fonts", "Federation.ttf")
-    FEDERATION_BOLD_FONT = os.path.join(BASE_DIR, "fonts", "FederationBold.ttf")
+    FEDERATION_FONT = "examples/test_assets/Federation.ttf"
+    FEDERATION_BOLD_FONT =  "examples/test_assets/FederationBold.ttf"
     
     # Start timing for performance monitoring
     start_time = time.time()
