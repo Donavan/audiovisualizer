@@ -21,6 +21,7 @@ dependencies = [
     "pillow",
     "moviepy",
     "librosa",
+    "psutil"
 ]
 
 [project.urls]
