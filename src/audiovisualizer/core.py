@@ -2,9 +2,10 @@ import os
 import logging
 from moviepy.video.io.VideoFileClip import VideoFileClip
 from moviepy.video.compositing.CompositeVideoClip import CompositeVideoClip
+from typing import Dict, List, Tuple, Union, Optional, Any
 
 from .audio_features import AudioFeatureExtractor
-from .elements import LogoManager, TextManager
+from .elements import ElementManager, LogoElement, TextElement
 from .export import VideoExporter
 
 logger = logging.getLogger(__name__)
@@ -14,151 +15,171 @@ class AudioVisualOverlay:
     Main class for creating audio-visual overlays with reactive elements.
     Acts as a facade to the various specialized components.
     """
-    def __init__(self):
-        self.visualization_video = None
-        self.logo_manager = LogoManager()
-        self.text_manager = TextManager()
+    def __init__(self, video_path=None):
+        """
+        Initialize the audio visual overlay processor
+        
+        Args:
+            video_path: Optional path to video file to load immediately
+        """
+        self.video = None
+        self.element_manager = ElementManager()
         self.audio_feature_extractor = AudioFeatureExtractor()
         self.exporter = VideoExporter()
         
-    def load_files(self, visualization_path, logo_path=None):
-        """Load the visualization video (with embedded audio) and optional logo."""
-        self.visualization_video = VideoFileClip(visualization_path)
+        if video_path:
+            self.load_video(video_path)
+        
+    def load_video(self, video_path):
+        """Load a video file for processing
+        
+        Args:
+            video_path: Path to the video file
+            
+        Returns:
+            self: For method chaining
+        """
+        self.video = VideoFileClip(video_path)
         
         # Initialize managers with the base video
-        self._update_managers()
+        self.element_manager.set_base_video(self.video)
+        self.exporter.set_video(self.video)
+        
         return self
     
-    def _update_managers(self):
-        """Update all managers with current video properties"""
-        if self.visualization_video:
-            self.logo_manager.set_base_video(self.visualization_video)
-            self.text_manager.set_base_video(self.visualization_video)
-            self.exporter.set_video(self.visualization_video)
-    
     def extract_audio_features(self, n_mfcc=13, hop_length=512):
-        """Extract audio features for potential reactive elements from the video's audio."""
-        if not self.visualization_video:
-            logger.error("No visualization video loaded.")
+        """Extract audio features for reactive elements
+        
+        Args:
+            n_mfcc: Number of MFCC coefficients to extract
+            hop_length: Hop length for feature extraction
+            
+        Returns:
+            self: For method chaining
+        """
+        if not self.video:
+            logger.error("No video loaded.")
             return self
             
         self.audio_feature_extractor.extract_from_video(
-            self.visualization_video, 
+            self.video, 
             n_mfcc=n_mfcc, 
             hop_length=hop_length
         )
         
-        # Share the extracted features with managers that need them
-        self.logo_manager.set_audio_features(self.audio_feature_extractor.features)
-        self.text_manager.set_audio_features(self.audio_feature_extractor.features)
+        # Share the extracted features with the element manager
+        self.element_manager.set_audio_features(self.audio_feature_extractor.features)
         
         return self
     
-    def add_static_logo(self, logo_path=None, position=('right', 'top'), margin=20, size=0.15):
-        """Add a static logo overlay to the visualization."""
-        if not logo_path:
-            logger.warning("No logo file provided.")
-            return self
+    def add_logo(self, logo_path, position="top-right", size=0.15, margin=20):
+        """Add a logo element to the video
+        
+        Args:
+            logo_path: Path to logo image file
+            position: Position hint ("top-right", "center", etc.)
+            size: Size as fraction of video width or (w, h) tuple
+            margin: Margin from edges in pixels
             
-        logo_clip = self.logo_manager.create_static_logo(
+        Returns:
+            LogoElement: The created logo element for adding reactions
+        """
+        if not self.video:
+            logger.error("No video loaded.")
+            return None
+            
+        # Create the logo element
+        logo = self.element_manager.create_logo(
             logo_path=logo_path,
             position=position,
-            margin=margin,
-            size=size
+            size=size,
+            margin=margin
         )
         
-        # Update the main video with the logo added
-        if logo_clip:
-            self.visualization_video = CompositeVideoClip([
-                self.visualization_video,
-                logo_clip
-            ])
-            self._update_managers()
-            
-        return self
+        return logo
     
-    def add_reactive_logo(self, logo_path=None, position=('right', 'top'), margin=20, base_size=0.15,
-                          react_to='rms', intensity=0.3):
-        """Add a logo that reacts to audio features like amplitude/beats."""
-        if not logo_path:
-            logger.warning("No logo file provided.")
-            return self
-            
-        if not hasattr(self.audio_feature_extractor, 'features') or not self.audio_feature_extractor.features:
-            logger.warning("Audio features not extracted. Call extract_audio_features() first.")
-            return self
-            
-        logo_clips = self.logo_manager.create_reactive_logo(
-            logo_path=logo_path,
-            position=position,
-            margin=margin,
-            base_size=base_size,
-            react_to=react_to,
-            intensity=intensity
-        )
+    def add_text(self, text, position="bottom-center", fontsize=30, 
+                color="white", font_path=None, margin=30):
+        """Add a text element to the video
         
-        # Update the main video with the reactive logo elements
-        if logo_clips:
-            all_clips = [self.visualization_video] + logo_clips
-            self.visualization_video = CompositeVideoClip(all_clips, size=self.visualization_video.size)
-            self._update_managers()
+        Args:
+            text: Text content
+            position: Position hint ("bottom-center", "top-left", etc.)
+            fontsize: Font size in pixels
+            color: Text color
+            font_path: Optional path to font file
+            margin: Margin from edges in pixels
             
-        return self
-    
-    def add_text_overlay(self, text, position=('center', 'bottom'), margin=30,
-                         fontsize=30, color='white', font_path=None, duration=None):
-        """Add a text overlay to the visualization."""
-        text_clip = self.text_manager.create_static_text(
+        Returns:
+            TextElement: The created text element for adding reactions
+        """
+        if not self.video:
+            logger.error("No video loaded.")
+            return None
+            
+        # Create the text element
+        text_elem = self.element_manager.create_text(
             text=text,
             position=position,
-            margin=margin,
             fontsize=fontsize,
             color=color,
             font_path=font_path,
-            duration=duration
+            margin=margin
         )
         
-        # Update the main video with the text element
-        if text_clip:
-            self.visualization_video = CompositeVideoClip([
-                self.visualization_video,
-                text_clip
-            ])
-            self._update_managers()
-            
-        return self
+        return text_elem
     
-    def add_reactive_text(self, text, position=('center', 'bottom'), margin=30,
-                          base_fontsize=30, color='white', font_path=None,
-                          react_to='rms', intensity=0.3):
-        """Add text that reacts to audio features like amplitude/beats."""
-        if not hasattr(self.audio_feature_extractor, 'features') or not self.audio_feature_extractor.features:
-            logger.warning("Audio features not extracted. Call extract_audio_features() first.")
+    def process(self):
+        """Process the video with all elements and their reactions
+        
+        Returns:
+            self: For method chaining
+        """
+        if not self.video:
+            logger.error("No video loaded.")
             return self
             
-        text_clips = self.text_manager.create_reactive_text(
-            text=text,
-            position=position,
-            margin=margin,
-            base_fontsize=base_fontsize,
-            color=color,
-            font_path=font_path,
-            react_to=react_to,
-            intensity=intensity
-        )
+        # Render all elements
+        element_clips = self.element_manager.render_all()
         
-        # Update the main video with the reactive text elements
-        if text_clips:
-            all_clips = [self.visualization_video] + text_clips
-            self.visualization_video = CompositeVideoClip(all_clips, size=self.visualization_video.size)
-            self._update_managers()
+        # Create the final composite video
+        if element_clips:
+            all_clips = [self.video] + element_clips
+            self.video = CompositeVideoClip(all_clips, size=self.video.size)
+            
+            # Update the exporter with the new video
+            self.exporter.set_video(self.video)
             
         return self
     
-    def export_gpu_optimized(self, output_path, quality='balanced'):
-        """Try to use GPU acceleration for export but fall back to CPU if needed."""
-        return self.exporter.export_gpu_optimized(output_path, quality=quality)
-    
     def export(self, output_path, fps=None):
-        """Simple and reliable export method that works on all systems."""
+        """Export the processed video
+        
+        Args:
+            output_path: Path to save the output video
+            fps: Frames per second (optional)
+            
+        Returns:
+            str: Path to the exported video
+        """
+        if not self.video:
+            logger.error("No video loaded.")
+            return None
+            
         return self.exporter.export(output_path, fps=fps)
+    
+    def export_gpu_optimized(self, output_path, quality='balanced'):
+        """Export using GPU acceleration if available
+        
+        Args:
+            output_path: Path to save the output video
+            quality: Quality preset ('high', 'balanced', 'fast')
+            
+        Returns:
+            str: Path to the exported video
+        """
+        if not self.video:
+            logger.error("No video loaded.")
+            return None
+            
+        return self.exporter.export_gpu_optimized(output_path, quality=quality)
