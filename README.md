@@ -30,7 +30,7 @@ overlay.extract_audio_features()
 
 # Add a logo and make it react to the beat
 logo = overlay.add_logo(
-    logo_path="logo.png",
+    logo_path="examples/test_assets/logo.png",
     position="top-right",
     size=0.15
 )
@@ -73,7 +73,7 @@ text.add_reaction(
         "color_map": [
             (0.0, "#3366CC"),  # blue for low values
             (0.5, "#FFFFFF"),  # white for mid values
-            (1.0, "#CC3366")   # pink for high values
+            (1.0, "#CC3366")  # pink for high values
         ]
     }
 )

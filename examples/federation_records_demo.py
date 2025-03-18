@@ -14,16 +14,16 @@ from audiovisualizer import AudioVisualOverlay
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 # Path to your video and assets with corrected paths
-VIDEO_PATH = os.path.join(BASE_DIR, "input_video.mp4")
-LOGO_PATH = os.path.join(BASE_DIR, "logo.png")
-OUTPUT_PATH = os.path.join(BASE_DIR, "federation_records_output.mp4")
+VIDEO_PATH = os.path.join(BASE_DIR, "examples/test_assets/input_video.mp4")
+LOGO_PATH = os.path.join(BASE_DIR, "examples/test_assets/logo.png")
+OUTPUT_PATH = os.path.join(BASE_DIR, "/output/federation_records_demo.mp4")
 
 # Federation font paths with corrected paths
 
 
 def main():
-    FEDERATION_FONT = os.path.join(BASE_DIR, "fonts", "Federation.ttf")
-    FEDERATION_BOLD_FONT = os.path.join(BASE_DIR, "fonts", "FederationBold.ttf")
+    FEDERATION_FONT = os.path.join(BASE_DIR, "fonts", "examples/test_assets/Federation.ttf")
+    FEDERATION_BOLD_FONT = os.path.join(BASE_DIR, "fonts", "examples/test_assets/FederationBold.ttf")
     # Check if files exist
     if not os.path.exists(VIDEO_PATH):
         print(f"Error: Video file not found: {VIDEO_PATH}")
