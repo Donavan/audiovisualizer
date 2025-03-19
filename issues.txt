@@ -1,0 +1,104 @@
+# Log output:
+
+2025-03-19 09:26:30,704 - audiovisualizer - INFO - Media info: 1080x1920 @ 25.0 fps, 180.08 seconds
+2025-03-19 09:26:34,533 - audiovisualizer - INFO - Media info: 1080x1920 @ 25.0 fps, 180.08 seconds
+2025-03-19 09:26:34,533 - audiovisualizer - INFO - Processing 2 effects
+2025-03-19 09:26:34,538 - audiovisualizer - INFO - Generated filters for effect: logo_0
+2025-03-19 09:26:34,543 - audiovisualizer - INFO - Generated filters for effect: text_1
+2025-03-19 09:26:34,544 - ffmpeg_utils - INFO - Running FFmpeg command: ffmpeg -i /mnt/c/Users/donav/Desktop/audiovisualizer/examples/test_assets/input_video.mp4 -filter_complex '[0:v][main];movie='"'"'/mnt/c/Users/donav/Desktop/audiovisualizer/examples/test_assets/logo.png'"'"'[logo];[logo]sendcmd=f='"'"'/tmp/tmp3_d5d2t3.txt'"'"':c='"'"'f=$4498 scale$0.18 opacity$0.8 angle$0'"'"';scale=iw*$0.18:ih*$0.18,rotate=$0*PI/180:c=0x00000000:ow=rotw($0*PI/180):oh=roth($0*PI/180),format=rgba,colorchannelmixer=aa=$0.8[scaledlogo];[main][scaledlogo]overlay=(w-overlay_w-10):10:shortest=1:format=rgb[out];[0:v][main];[main]drawtext=text='"'"'AUDIO VISUALIZER'"'"':fontfile='"'"'/mnt/c/Users/donav/Desktop/audiovisualizer/examples/test_assets/Federation.ttf'"'"':fontsize=48:fontcolor=${color}@${opacity}:x=(w-overlay_w)/2:y=(h-overlay_h-10):sendcmd=f='"'"'/tmp/tmpbgun3dk4.txt'"'"':c='"'"'f=$4498 opacity=$0.30000154183071637 color=$#FFFFFF'"'"'[out]' -c:a aac -b:a 192k -c:v libx264 -preset medium -crf 23 -y /mnt/c/Users/donav/Desktop/audiovisualizer/basic_overlay_output.mp4
+Traceback (most recent call last):
+  File "/mnt/c/Users/donav/Desktop/audiovisualizer/src/audiovisualizer/ffmpeg_utils.py", line 214, in run_ffmpeg_command
+    raise FFmpegError(f"FFmpeg command failed: {stderr.decode()}")
+audiovisualizer.ffmpeg_utils.FFmpegError: FFmpeg command failed: ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers
+  built with gcc 11 (Ubuntu 11.2.0-19ubuntu1)
+  configuration: --prefix=/usr --extra-version=0ubuntu0.22.04.1 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --enable-gnutls --enable-ladspa --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librabbitmq --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libsrt --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-libzmq --enable-libzvbi --enable-lv2 --enable-omx --enable-openal --enable-opencl --enable-opengl --enable-sdl2 --enable-pocketsphinx --enable-librsvg --enable-libmfx --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-libx264 --enable-shared
+  libavutil      56. 70.100 / 56. 70.100
+  libavcodec     58.134.100 / 58.134.100
+  libavformat    58. 76.100 / 58. 76.100
+  libavdevice    58. 13.100 / 58. 13.100
+  libavfilter     7.110.100 /  7.110.100
+  libswscale      5.  9.100 /  5.  9.100
+  libswresample   3.  9.100 /  3.  9.100
+  libpostproc    55.  9.100 / 55.  9.100
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/mnt/c/Users/donav/Desktop/audiovisualizer/examples/test_assets/input_video.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf61.7.100
+  Duration: 00:03:00.08, start: 0.000000, bitrate: 2664 kb/s
+  Stream #0:0(und): Video: h264 (Main) (avc1 / 0x31637661), yuv420p, 1080x1920 [SAR 1:1 DAR 9:16], 2464 kb/s, 25 fps, 25 tbr, 12800 tbn, 50 tbc (default)
+    Metadata:
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+      encoder         : Lavc61.19.101 h264_nvenc
+  Stream #0:1(und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 195 kb/s (default)
+    Metadata:
+      handler_name    : SoundHandler
+      vendor_id       : [0][0][0][0]
+[AVFilterGraph @ 0x55ccd08dd640] No such filter: ''
+Error initializing complex filters.
+Invalid argument
+
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/mnt/c/Users/donav/Desktop/audiovisualizer/examples/basic_overlay.py", line 74, in <module>
+    asyncio.run(main())
+  File "/usr/lib/python3.10/asyncio/runners.py", line 44, in run
+    return loop.run_until_complete(main)
+  File "/usr/lib/python3.10/asyncio/base_events.py", line 649, in run_until_complete
+    return future.result()
+  File "/mnt/c/Users/donav/Desktop/audiovisualizer/examples/basic_overlay.py", line 69, in main
+    await visualizer.process()
+  File "/mnt/c/Users/donav/Desktop/audiovisualizer/src/audiovisualizer/visualizer.py", line 434, in process
+    await self.ffmpeg.apply_effects(
+  File "/mnt/c/Users/donav/Desktop/audiovisualizer/src/audiovisualizer/ffmpeg_utils.py", line 255, in apply_effects
+    await self.run_ffmpeg_command(cmd)
+  File "/mnt/c/Users/donav/Desktop/audiovisualizer/src/audiovisualizer/ffmpeg_utils.py", line 216, in run_ffmpeg_command
+    raise FFmpegError(f"Failed to execute FFmpeg command: {str(e)}")
+audiovisualizer.ffmpeg_utils.FFmpegError: Failed to execute FFmpeg command: FFmpeg command failed: ffmpeg version 4.4.2-0ubuntu0.22.04.1 Copyright (c) 2000-2021 the FFmpeg developers
+  built with gcc 11 (Ubuntu 11.2.0-19ubuntu1)
+  configuration: --prefix=/usr --extra-version=0ubuntu0.22.04.1 --toolchain=hardened --libdir=/usr/lib/x86_64-linux-gnu --incdir=/usr/include/x86_64-linux-gnu --arch=amd64 --enable-gpl --disable-stripping --enable-gnutls --enable-ladspa --enable-libaom --enable-libass --enable-libbluray --enable-libbs2b --enable-libcaca --enable-libcdio --enable-libcodec2 --enable-libdav1d --enable-libflite --enable-libfontconfig --enable-libfreetype --enable-libfribidi --enable-libgme --enable-libgsm --enable-libjack --enable-libmp3lame --enable-libmysofa --enable-libopenjpeg --enable-libopenmpt --enable-libopus --enable-libpulse --enable-librabbitmq --enable-librubberband --enable-libshine --enable-libsnappy --enable-libsoxr --enable-libspeex --enable-libsrt --enable-libssh --enable-libtheora --enable-libtwolame --enable-libvidstab --enable-libvorbis --enable-libvpx --enable-libwebp --enable-libx265 --enable-libxml2 --enable-libxvid --enable-libzimg --enable-libzmq --enable-libzvbi --enable-lv2 --enable-omx --enable-openal --enable-opencl --enable-opengl --enable-sdl2 --enable-pocketsphinx --enable-librsvg --enable-libmfx --enable-libdc1394 --enable-libdrm --enable-libiec61883 --enable-chromaprint --enable-frei0r --enable-libx264 --enable-shared
+  libavutil      56. 70.100 / 56. 70.100
+  libavcodec     58.134.100 / 58.134.100
+  libavformat    58. 76.100 / 58. 76.100
+  libavdevice    58. 13.100 / 58. 13.100
+  libavfilter     7.110.100 /  7.110.100
+  libswscale      5.  9.100 /  5.  9.100
+  libswresample   3.  9.100 /  3.  9.100
+  libpostproc    55.  9.100 / 55.  9.100
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from '/mnt/c/Users/donav/Desktop/audiovisualizer/examples/test_assets/input_video.mp4':
+  Metadata:
+    major_brand     : isom
+    minor_version   : 512
+    compatible_brands: isomiso2avc1mp41
+    encoder         : Lavf61.7.100
+  Duration: 00:03:00.08, start: 0.000000, bitrate: 2664 kb/s
+  Stream #0:0(und): Video: h264 (Main) (avc1 / 0x31637661), yuv420p, 1080x1920 [SAR 1:1 DAR 9:16], 2464 kb/s, 25 fps, 25 tbr, 12800 tbn, 50 tbc (default)
+    Metadata:
+      handler_name    : VideoHandler
+      vendor_id       : [0][0][0][0]
+      encoder         : Lavc61.19.101 h264_nvenc
+  Stream #0:1(und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 195 kb/s (default)
+    Metadata:
+      handler_name    : SoundHandler
+      vendor_id       : [0][0][0][0]
+[AVFilterGraph @ 0x55ccd08dd640] No such filter: ''
+Error initializing complex filters.
+Invalid argument
+
+# What you said about this before we got disconnected:
+
+## Issue Summary
+The error "No such filter: ''" was occurring because the filter complex string contained empty filter definitions. This happened when filter chains like `[0:v][main]` were included without a corresponding filter operation.
+
+## Root Cause
+In the `build_complex_filter` method in `ffmpeg_utils.py`, we were joining all filter chains with semicolons without properly validating that each chain contained a valid filter operation. Some filter chains were just label declarations (`[0:v][main]`) without actual filters.
+
+## Solution
+Update the `build_complex_filter` method to:
+1. Skip empty filter chains
+2. Skip chains that only contain input/output pad definitions without actual filter operations
+3. Add robust validation to ensure only valid filter chains are included in the final string
