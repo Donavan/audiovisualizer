@@ -240,78 +240,59 @@ class LogoOverlayEffect(BaseEffect):
         self._rotation = True
         self._rotation_speed = speed
         return self
-    
+
     def generate_filter_commands(self, sync_data: Dict[str, Any]) -> List[str]:
         """Generate FFmpeg filter commands for logo overlay effect.
-        
+
         Args:
             sync_data: Dictionary containing synchronized audio features.
-            
+
         Returns:
             List of FFmpeg filter strings.
         """
         if not os.path.exists(self.logo_path):
             raise ValueError(f"Logo file not found: {self.logo_path}")
-        
-        # Get feature data for reactivity
+
+        # Get feature data for reactivity - but we'll use a simple average now
         feature_data = self.get_feature_data(sync_data)
-        n_frames = sync_data['n_frames']
-        
-        # Create temporary data file for frame-by-frame parameters
-        fd, data_file = tempfile.mkstemp(suffix='.txt')
-        os.close(fd)
-        
-        # Generate frame data
-        with open(data_file, 'w') as f:
-            for frame in range(n_frames):
-                # Calculate scale based on audio feature
-                if self._scale_min != self._scale_max:
-                    feature_val = feature_data[frame] if frame < len(feature_data) else 0
-                    scale = self._scale_min + (self._scale_max - self._scale_min) * feature_val
-                else:
-                    scale = self._scale
-                
-                # Calculate opacity based on audio feature
-                if self._opacity_min != self._opacity_max:
-                    feature_val = feature_data[frame] if frame < len(feature_data) else 0
-                    opacity = self._opacity_min + (self._opacity_max - self._opacity_min) * feature_val
-                else:
-                    opacity = self.opacity
-                
-                # Calculate rotation angle if enabled
-                if self._rotation:
-                    angle = (frame * self._rotation_speed) % 360
-                else:
-                    angle = 0
-                
-                # Write frame data
-                f.write(f"{frame} {scale} {opacity} {angle}\n")
-        
+        avg_feature = sum(feature_data) / len(feature_data) if len(feature_data) > 0 else 0.5
+
+        # Calculate an average scale and opacity based on the average feature value
+        if self._scale_min != self._scale_max:
+            scale = self._scale_min + (self._scale_max - self._scale_min) * avg_feature
+        else:
+            scale = self.scale
+
+        if self._opacity_min != self._opacity_max:
+            opacity = self._opacity_min + (self._opacity_max - self._opacity_min) * avg_feature
+        else:
+            opacity = self.opacity
+
         # Generate filter commands
         filters = []
-        
-        # Input for logo
-        filters.append(f"[0:v]" + \
-                      f"[main];" + \
-                      f"movie='{self.logo_path}'" + \
-                      f"[logo]")
-        
-        # Setup sendcmd filter for frame-by-frame control
-        filters.append(f"[logo]sendcmd=f='{data_file}':" + \
-                      f"c='f=${frame} scale${scale} opacity${opacity} angle${angle}';" + \
-                      f"scale=iw*${scale}:ih*${scale}," + \
-                      f"rotate=${angle}*PI/180:c=0x00000000:ow=rotw(${angle}*PI/180):oh=roth(${angle}*PI/180)," + \
-                      f"format=rgba,colorchannelmixer=aa=${opacity}" + \
-                      f"[scaledlogo]")
-        
+
+        # Input for logo - simplified
+        filters.append(f"[0:v][main]; movie='{self.logo_path}'[logo]")
+
+        # Transform logo with static parameters - no sendcmd
+        transform_filter = f"[logo]scale=iw*{scale}:ih*{scale}"
+
+        # Add rotation if enabled - simplified to a static angle
+        if self._rotation:
+            angle = 45 if self._rotation_speed > 0 else 0  # Just use a static rotation for now
+            transform_filter += f",rotate={angle}*PI/180:c=0x00000000"
+
+        # Add opacity
+        transform_filter += f",format=rgba,colorchannelmixer=aa={opacity}[scaledlogo]"
+
+        filters.append(transform_filter)
+
         # Overlay logo on main video
         x, y = self.position
-        filters.append(f"[main][scaledlogo]overlay={x}:{y}:" + \
-                      f"shortest=1:format=rgb" + \
-                      f"[out]")
-        
+        filters.append(f"[main][scaledlogo]overlay={x}:{y}:shortest=1:format=rgb[out]")
+
         return filters
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert effect configuration to a dictionary.
         
@@ -488,85 +469,69 @@ class TextOverlayEffect(BaseEffect):
         self._bg_color = bg_color
         self._bg_opacity = max(0.0, min(1.0, bg_opacity))
         return self
-    
+
     def generate_filter_commands(self, sync_data: Dict[str, Any]) -> List[str]:
         """Generate FFmpeg filter commands for text overlay effect.
-        
+
         Args:
             sync_data: Dictionary containing synchronized audio features.
-            
+
         Returns:
             List of FFmpeg filter strings.
         """
         if not os.path.exists(self.font_path):
             raise ValueError(f"Font file not found: {self.font_path}")
-        
-        # Get feature data for reactivity
+
+        # Get feature data for reactivity - but we'll use a simple average now
         feature_data = self.get_feature_data(sync_data)
-        n_frames = sync_data['n_frames']
-        
-        # Create temporary data file for frame-by-frame parameters
-        fd, data_file = tempfile.mkstemp(suffix='.txt')
-        os.close(fd)
-        
-        # Generate frame data
-        with open(data_file, 'w') as f:
-            for frame in range(n_frames):
-                # Calculate opacity based on audio feature
-                if self._opacity_min != self._opacity_max:
-                    feature_val = feature_data[frame] if frame < len(feature_data) else 0
-                    opacity = self._opacity_min + (self._opacity_max - self._opacity_min) * feature_val
-                else:
-                    opacity = self.opacity
-                
-                # Calculate color if color shift is enabled
-                if self._color_shift:
-                    feature_val = feature_data[frame] if frame < len(feature_data) else 0
-                    # Shift from white to red based on intensity
-                    r = 255
-                    g = max(0, int(255 * (1 - feature_val)))
-                    b = max(0, int(255 * (1 - feature_val)))
-                    color = f"#{r:02x}{g:02x}{b:02x}"
-                else:
-                    color = self.font_color
-                
-                # Write frame data
-                f.write(f"{frame} {opacity} {color}\n")
-        
+        avg_feature = sum(feature_data) / len(feature_data) if len(feature_data) > 0 else 0.5
+
+        # Calculate an average opacity based on the average feature value
+        if self._opacity_min != self._opacity_max:
+            opacity = self._opacity_min + (self._opacity_max - self._opacity_min) * avg_feature
+        else:
+            opacity = self.opacity
+
+        # Calculate color - simplified to a static color for now
+        if self._color_shift:
+            # Create a color based on the average feature
+            r = 255
+            g = max(0, int(255 * (1 - avg_feature)))
+            b = max(0, int(255 * (1 - avg_feature)))
+            color = f"#{r:02x}{g:02x}{b:02x}"
+        else:
+            color = self.font_color
+
         # Generate filter commands
         filters = []
-        
+
         # Main video input
         filters.append(f"[0:v][main]")
-        
-        # Create text overlay
+
+        # Create text overlay - simplified with static parameters, no sendcmd
         text_filter = f"drawtext=text='{self.text}':" + \
-                      f"fontfile='{self.font_path}':" + \
-                      f"fontsize={self.font_size}:" + \
-                      f"fontcolor=${{color}}@${{opacity}}:"
-        
+                     f"fontfile='{self.font_path}':" + \
+                     f"fontsize={self.font_size}:" + \
+                     f"fontcolor={color}@{opacity}:"
+
         # Add position parameters
         x, y = self.position
-        text_filter += f"x={x}:y={y}:"
-        
+        text_filter += f"x={x}:y={y}"
+
         # Add background box if enabled
         if self._bg_box:
-            text_filter += f"box=1:" + \
+            text_filter += f":box=1:" + \
                           f"boxcolor={self._bg_color}@{self._bg_opacity}:" + \
-                          f"boxborderw=5:"
-        
+                          f"boxborderw=5"
+
         # Add glow if enabled
         if self._glow:
             # Add a shadow with the glow color
-            text_filter += f"shadowcolor={self._glow_color}@0.5:" + \
-                          f"shadowx=2:shadowy=2:"
-        
-        # Add sendcmd for frame-by-frame control
-        text_filter += f"sendcmd=f='{data_file}':" + \
-                      f"c='f=${frame} opacity=${opacity} color=${color}'"        
-        
+            text_filter += f":shadowcolor={self._glow_color}@0.5:" + \
+                          f"shadowx=2:shadowy=2"
+
         filters.append(f"[main]{text_filter}[out]")
-        
+
         return filters
     
     def to_dict(self) -> Dict[str, Any]:

@@ -155,8 +155,7 @@ class FFmpegProcessor:
         except Exception as e:
             raise FFmpegError(f"Failed to extract audio: {str(e)}")
     
-    def build_complex_filter(self, 
-                            filter_chains: List[str]) -> str:
+    def build_complex_filter(self, filter_chains: List[str]) -> str:
         """Build a complex filtergraph string from individual filter chains.
         
         Args:
@@ -164,8 +163,27 @@ class FFmpegProcessor:
             
         Returns:
             A complete complex filtergraph string.
+            
+        Note:
+            Filters that are empty or only contain input/output pad definitions
+            without actual filter operations will be skipped.
         """
-        return ';'.join(filter_chains)
+        valid_chains = []
+        
+        for chain in filter_chains:
+            # Skip empty chains
+            if not chain.strip():
+                continue
+                
+            # Skip chains that only contain pad definitions without filter operations
+            # Pattern: only contains [label] definitions without actual filter commands
+            if all(part.startswith('[') and part.endswith(']') for part in chain.split() if part):
+                continue
+                
+            # Add valid chain
+            valid_chains.append(chain)
+        
+        return ';'.join(valid_chains)
     
     def build_overlay_filter(self,
                            main_input: str,
