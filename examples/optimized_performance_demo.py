@@ -350,60 +350,12 @@ def main():
     tracker.start_checkpoint("Video export")
     print(f"Exporting video to: {OUTPUT_PATH}")
     
-    # Custom implementation to maximize thread usage and GPU acceleration
+    # Export with the updated export_gpu_optimized method passing the thread count
     if args.use_gpu:
-        overlay.export_gpu_optimized(OUTPUT_PATH, quality=args.quality)
+        overlay.export_gpu_optimized(OUTPUT_PATH, quality=args.quality, threads=args.threads)
     else:
-        # Create a patched export function to use custom thread count
-        from functools import partial
-        from types import MethodType
-        
-        def custom_export(self, output_path, fps=None):
-            """Export with custom thread count"""
-            if not self.video:
-                print("No video to export")
-                return None
-                
-            if fps is None:
-                fps = self.video.fps
-    
-            print(f"Exporting with {args.threads} threads...")
-    
-            # Quality settings mapping
-            preset = {
-                'speed': 'veryfast',
-                'balanced': 'medium',
-                'quality': 'slow'
-            }.get(args.quality, 'medium')
-            
-            bitrate = {
-                'speed': '6000k',
-                'balanced': '10000k',
-                'quality': '15000k'
-            }.get(args.quality, '10000k')
-    
-            try:
-                self.video.write_videofile(
-                    output_path,
-                    codec="libx264",
-                    fps=fps,
-                    preset=preset,
-                    bitrate=bitrate,
-                    audio_codec="aac",
-                    audio_bitrate="192k",
-                    threads=args.threads,  # Use specified thread count
-                    ffmpeg_params=["-pix_fmt", "yuv420p"],
-                    logger=None
-                )
-                print(f"Video successfully exported to {output_path}")
-            except Exception as e:
-                print(f"Export failed: {e}")
-                
-            return self
-        
-        # Patch the export method to use our custom function
-        overlay.exporter.export = MethodType(custom_export, overlay.exporter)
-        overlay.export(OUTPUT_PATH)
+        # Use the updated export method with threads parameter
+        overlay.export(OUTPUT_PATH, threads=args.threads)
     
     tracker.end_checkpoint()
     

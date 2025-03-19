@@ -14,7 +14,7 @@ class VideoExporter:
         """Set the video to be exported"""
         self.video = video
         
-    def export_gpu_optimized(self, output_path, quality='balanced'):
+    def export_gpu_optimized(self, output_path, quality='balanced', threads=None):
         """
         Try to use GPU acceleration but fall back to CPU if needed.
         Simplified to work with older NVIDIA drivers.
@@ -22,10 +22,18 @@ class VideoExporter:
         Parameters:
         - output_path: Path to save the output video
         - quality: 'speed', 'balanced', or 'quality' presets
+        - threads: Number of CPU threads to use for processing (default: use available cores)
         """
         if not self.video:
             logger.error("No video to export")
             return None
+            
+        # If threads not specified, use a reasonable default based on CPU count
+        if threads is None:
+            import multiprocessing
+            threads = min(16, multiprocessing.cpu_count())  # Default to reasonable thread count
+        
+        logger.info(f"Using {threads} threads for export")
             
         # First, try to detect if we can use NVIDIA acceleration
         try:
@@ -68,7 +76,7 @@ class VideoExporter:
                     audio_codec="aac",
                     audio_bitrate="192k",
                     ffmpeg_params=["-pix_fmt", "yuv420p"],
-                    threads=4
+                    threads=threads  # Use specified thread count
                 )
                 logger.info(f"GPU-accelerated video exported to {output_path}")
                 return self
@@ -98,7 +106,7 @@ class VideoExporter:
                 audio_codec="aac",
                 audio_bitrate="192k",
                 ffmpeg_params=["-pix_fmt", "yuv420p"],
-                threads=4
+                threads=threads  # Use specified thread count
             )
             logger.info(f"Video exported to {output_path}")
         except Exception as e:
@@ -107,13 +115,14 @@ class VideoExporter:
 
         return self
     
-    def export(self, output_path, fps=None):
+    def export(self, output_path, fps=None, threads=None):
         """
         Simple and reliable export method that works on all systems.
 
         Parameters:
         - output_path: Path to save the output video
         - fps: Frame rate (if None, uses the same as source video)
+        - threads: Number of CPU threads to use for processing (default: use available cores)
         """
         if not self.video:
             logger.error("No video to export")
@@ -121,8 +130,13 @@ class VideoExporter:
             
         if fps is None:
             fps = self.video.fps
+            
+        # If threads not specified, use a reasonable default based on CPU count
+        if threads is None:
+            import multiprocessing
+            threads = min(16, multiprocessing.cpu_count())
 
-        logger.info(f"Exporting video to {output_path}...")
+        logger.info(f"Exporting video to {output_path} using {threads} threads...")
 
         # Use the simplest possible parameters to ensure compatibility
         try:
@@ -134,7 +148,7 @@ class VideoExporter:
                 bitrate="8000k",
                 audio_codec="aac",
                 audio_bitrate="192k",
-                threads=4,  # Use reasonable thread count
+                threads=threads,  # Use specified thread count
                 ffmpeg_params=["-pix_fmt", "yuv420p"],  # Ensure compatibility
                 logger=None  # Suppress excessive logging
             )
