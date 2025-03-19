@@ -1,425 +1,906 @@
+"""Visual effects for audio visualization.
+
+This module provides a collection of visual effects that can be applied to videos
+based on audio features. Effects include overlays, filters, and animations.
+"""
+
 import os
-import logging
-from typing import Dict, List, Optional, Tuple, Union, Any
-from abc import ABC, abstractmethod
+import tempfile
+import json
+import numpy as np
+from typing import Dict, List, Optional, Tuple, Union, Any, Callable
 
-logger = logging.getLogger(__name__)
-
-class BaseEffect(ABC):
-    """
-    Abstract base class for all visual effects.
+class BaseEffect:
+    """Base class for all visual effects.
+    
+    This class defines the interface for visual effects and provides common
+    functionality for synchronizing with audio features.
+    
+    Attributes:
+        name (str): Unique name for the effect.
+        order (int): Execution order priority (lower numbers execute first).
+        enabled (bool): Whether the effect is enabled.
     """
     
-    def __init__(self, **kwargs):
-        self.params = kwargs
-        self.requires_audio_analysis = False
-    
-    @abstractmethod
-    def prepare(self, audio_analyzer) -> None:
-        """
-        Prepare the effect for rendering, potentially using audio analysis.
+    def __init__(self, name: str, order: int = 0):
+        """Initialize BaseEffect.
         
         Args:
-            audio_analyzer: AudioAnalyzer instance with extracted features
+            name: Unique name for the effect.
+            order: Execution order priority (lower numbers execute first).
         """
-        pass
+        self.name = name
+        self.order = order
+        self.enabled = True
+        self._audio_feature = None
+        self._feature_source = None
+        self._feature_transform = None
     
-    @abstractmethod
-    def get_filter_string(self) -> str:
-        """
-        Get the FFmpeg filter string for this effect.
-        
-        Returns:
-            String containing the FFmpeg filter specification
-        """
-        pass
-
-
-class TextEffect(BaseEffect):
-    """
-    Adds text overlay to video with optional audio reactivity.
-    """
-    
-    def __init__(self, text: str, x: Union[int, str] = 10, y: Union[int, str] = 10, 
-                 fontsize: int = 24, fontcolor: str = "white", fontfile: Optional[str] = None,
-                 react_to: Optional[str] = None, **kwargs):
-        """
-        Initialize a text overlay effect.
+    def set_audio_feature(
+        self, 
+        feature: str, 
+        source: str = 'amplitude',
+        transform: Optional[Callable[[np.ndarray], np.ndarray]] = None
+    ) -> 'BaseEffect':
+        """Set the audio feature to synchronize with.
         
         Args:
-            text: The text to display
-            x: X position (pixels or position keyword like "center")
-            y: Y position (pixels or position keyword like "center")
-            fontsize: Font size in pixels
-            fontcolor: Font color
-            fontfile: Path to a TrueType font file
-            react_to: Audio feature to react to ("volume", "bass", etc)
-            **kwargs: Additional parameters for text effect
-        """
-        super().__init__(**kwargs)
-        self.text = text
-        self.x = x
-        self.y = y
-        self.fontsize = fontsize
-        self.fontcolor = fontcolor
-        self.fontfile = fontfile
-        self.react_to = react_to
-        
-        if react_to:
-            self.requires_audio_analysis = True
-    
-    def prepare(self, audio_analyzer) -> None:
-        """
-        Prepare the text effect, potentially using audio analysis.
-        
-        Args:
-            audio_analyzer: AudioAnalyzer instance with extracted features
-        """
-        if self.react_to and self.requires_audio_analysis:
-            # Verify the requested audio feature exists
-            if not audio_analyzer.get_feature(self.react_to):
-                logger.warning(f"Audio feature '{self.react_to}' not available for text effect")
-    
-    def get_filter_string(self) -> str:
-        """
-        Get the FFmpeg filter string for text overlay.
-        
-        Returns:
-            String containing the FFmpeg drawtext filter
-        """
-        # Basic drawtext parameters
-        params = [f"text='{self.text}'"]
-        
-        # Handle position parameters
-        if isinstance(self.x, str) and self.x == "center":
-            params.append("x=(w-text_w)/2")
-        else:
-            params.append(f"x={self.x}")
+            feature: Name of the feature to use (e.g., 'amplitude', 'freq_bands.bass').
+            source: Source of the feature ('amplitude', 'freq_bands', 'beats', etc.).
+            transform: Optional function to transform the feature values.
             
-        if isinstance(self.y, str) and self.y == "center":
-            params.append("y=(h-text_h)/2")
-        elif isinstance(self.y, str) and self.y == "bottom":
-            params.append("y=h-text_h-10")
-        else:
-            params.append(f"y={self.y}")
-        
-        # Font parameters
-        params.append(f"fontsize={self.fontsize}")
-        params.append(f"fontcolor={self.fontcolor}")
-        
-        if self.fontfile and os.path.exists(self.fontfile):
-            params.append(f"fontfile='{self.fontfile}'")
-        
-        # Additional parameters from kwargs
-        for key, value in self.params.items():
-            if key not in ['text', 'x', 'y', 'fontsize', 'fontcolor', 'fontfile', 'react_to']:
-                params.append(f"{key}={value}")
-        
-        # If audio reactivity is desired, we'll need to handle it differently
-        # Since FFmpeg doesn't directly support dynamic parameters based on audio,
-        # we'd need to generate frame-by-frame commands or use expresions with sendcmd
-        if self.react_to:
-            # This is a simple example that could be expanded for true reactivity
-            # For now, just adding an alpha blend effect as a placeholder
-            params.append("alpha=0.8")
-        
-        return f"drawtext={':'.join(params)}"
-
-
-class LogoEffect(BaseEffect):
-    """
-    Adds a logo/image overlay to video with optional audio reactivity.
-    """
-    
-    def __init__(self, image_path: str, x: Union[int, str] = 10, y: Union[int, str] = 10,
-                 width: Optional[int] = None, height: Optional[int] = None,
-                 opacity: float = 1.0, react_to: Optional[str] = None, **kwargs):
+        Returns:
+            Self for method chaining.
         """
-        Initialize a logo overlay effect.
+        self._audio_feature = feature
+        self._feature_source = source
+        self._feature_transform = transform
+        return self
+    
+    def get_feature_data(self, sync_data: Dict[str, Any]) -> np.ndarray:
+        """Extract relevant feature data from sync_data.
         
         Args:
-            image_path: Path to the image file
-            x: X position (pixels or position keyword like "center")
-            y: Y position (pixels or position keyword like "center")
-            width: Optional width to resize image to
-            height: Optional height to resize image to
-            opacity: Opacity of the logo (0.0-1.0)
-            react_to: Audio feature to react to ("volume", "bass", etc)
-            **kwargs: Additional parameters for logo effect
-        """
-        super().__init__(**kwargs)
-        self.image_path = image_path
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.opacity = opacity
-        self.react_to = react_to
-        
-        if not os.path.exists(image_path):
-            raise FileNotFoundError(f"Logo image not found: {image_path}")
+            sync_data: Dictionary containing synchronized audio features.
             
-        if react_to:
-            self.requires_audio_analysis = True
-    
-    def prepare(self, audio_analyzer) -> None:
+        Returns:
+            Numpy array of feature values for each frame.
         """
-        Prepare the logo effect, potentially using audio analysis.
+        if not self._audio_feature:
+            # Return a flat array of 1s if no feature is specified
+            return np.ones(sync_data['n_frames'])
+        
+        # Parse the feature path (e.g., 'freq_bands.bass')
+        parts = self._audio_feature.split('.')
+        
+        # Navigate to the correct feature
+        data = sync_data['features']
+        for part in parts:
+            data = data.get(part, None)
+            if data is None:
+                raise ValueError(f"Feature not found: {self._audio_feature}")
+        
+        # Apply transform if provided
+        if self._feature_transform and callable(self._feature_transform):
+            data = self._feature_transform(data)
+        
+        return data
+    
+    def generate_filter_commands(self, sync_data: Dict[str, Any]) -> List[str]:
+        """Generate FFmpeg filter commands for this effect.
         
         Args:
-            audio_analyzer: AudioAnalyzer instance with extracted features
-        """
-        if self.react_to and self.requires_audio_analysis:
-            # Verify the requested audio feature exists
-            if not audio_analyzer.get_feature(self.react_to):
-                logger.warning(f"Audio feature '{self.react_to}' not available for logo effect")
-    
-    def get_filter_string(self) -> str:
-        """
-        Get the FFmpeg filter string for logo overlay.
-        
-        Returns:
-            String containing the FFmpeg overlay filter chain
-        """
-        # Prepare the overlay image
-        # First create an input stream for the logo
-        overlay_input = "movie='" + self.image_path.replace("'", "'\\'") + "'"
-        
-        # Apply any scaling if needed
-        scale_params = []
-        if self.width is not None:
-            scale_params.append(f"width={self.width}")
-        if self.height is not None:
-            scale_params.append(f"height={self.height}")
-        
-        if scale_params:
-            overlay_input += "[logo];[logo]scale=" + ":".
-
- class="""
-            String containing the FFmpeg overlay filter chain
-        """
-        # Prepare the overlay image
-        # First create an input stream for the logo
-        overlay_input = "movie='" + self.image_path.replace("'", "'\\'") + "'"
-        
-        # Apply any scaling if needed
-        scale_params = []
-        if self.width is not None:
-            scale_params.append(f"width={self.width}")
-        if self.height is not None:
-            scale_params.append(f"height={self.height}")
-        
-        if scale_params:
-            overlay_input += "[logo];[logo]scale=" + ":".join(scale_params)
-        
-        # Handle opacity if not 1.0
-        if self.opacity < 1.0:
-            overlay_input += f"[scaled];[scaled]format=rgba,colorchannelmixer=aa={self.opacity}"
-        
-        # Position parameters for overlay
-        position_params = []
-        
-        # Handle position parameters
-        if isinstance(self.x, str) and self.x == "center":
-            position_params.append("x=(main_w-overlay_w)/2")
-        else:
-            position_params.append(f"x={self.x}")
+            sync_data: Dictionary containing synchronized audio features.
             
-        if isinstance(self.y, str) and self.y == "center":
-            position_params.append("y=(main_h-overlay_h)/2")
-        elif isinstance(self.y, str) and self.y == "bottom":
-            position_params.append("y=main_h-overlay_h-10")
-        else:
-            position_params.append(f"y={self.y}")
-        
-        # Final overlay filter
-        overlay_filter = f"{overlay_input}[watermark];[in][watermark]overlay={':'.join(position_params)}"
-        
-        return overlay_filter
-
-
-class WaveformEffect(BaseEffect):
-    """
-    Adds an audio waveform visualization to the video.
-    """
+        Returns:
+            List of FFmpeg filter strings.
+            
+        Note:
+            This method must be implemented by subclasses.
+        """
+        raise NotImplementedError("Subclasses must implement generate_filter_commands()")
     
-    def __init__(self, x: int = 0, y: int = 0, width: int = 640, height: int = 120,
-                 color: str = "white", **kwargs):
-        """
-        Initialize a waveform visualization effect.
-        
-        Args:
-            x: X position of the waveform
-            y: Y position of the waveform
-            width: Width of the waveform
-            height: Height of the waveform
-            color: Color of the waveform
-            **kwargs: Additional parameters for waveform effect
-        """
-        super().__init__(**kwargs)
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.color = color
-        
-        # Waveform effect always requires audio
-        self.requires_audio_analysis = True
-    
-    def prepare(self, audio_analyzer) -> None:
-        """
-        Prepare the waveform effect.
-        
-        Args:
-            audio_analyzer: AudioAnalyzer instance with extracted features
-        """
-        # Nothing to prepare specifically
-        pass
-    
-    def get_filter_string(self) -> str:
-        """
-        Get the FFmpeg filter string for waveform visualization.
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert effect configuration to a dictionary.
         
         Returns:
-            String containing the FFmpeg showwaves filter
+            Dictionary representation of the effect configuration.
         """
-        # Use FFmpeg's showwaves filter
-        waveform_params = [
-            f"s={self.width}x{self.height}",
-            f"colors={self.color}",
-            "mode=line",  # p2p, line, cline
-            "draw=full",
-            f"x={self.x}",
-            f"y={self.y}"
-        ]
-        
-        # Add additional parameters
-        for key, value in self.params.items():
-            if key not in ['x', 'y', 'width', 'height', 'color']:
-                waveform_params.append(f"{key}={value}")
-        
-        # Create a split of the audio to visualize
-        # Since this requires a more complex filter chain, we need to 
-        # implement this differently in the main filter complex
-        return f"[0:a]showwaves={':\\:'.join(waveform_params)}[waveform];[in][waveform]overlay=0:0:format=auto"
-
-
-class SpectrumEffect(BaseEffect):
-    """
-    Adds an audio spectrum visualization to the video.
-    """
-    
-    def __init__(self, x: int = 0, y: int = 0, width: int = 640, height: int = 120,
-                 mode: str = "bar", **kwargs):
-        """
-        Initialize a spectrum visualization effect.
-        
-        Args:
-            x: X position of the spectrum
-            y: Y position of the spectrum
-            width: Width of the spectrum
-            height: Height of the spectrum
-            mode: Visualization mode ("bar", "line", etc.)
-            **kwargs: Additional parameters for spectrum effect
-        """
-        super().__init__(**kwargs)
-        self.x = x
-        self.y = y
-        self.width = width
-        self.height = height
-        self.mode = mode
-        
-        # Spectrum effect always requires audio
-        self.requires_audio_analysis = True
-    
-    def prepare(self, audio_analyzer) -> None:
-        """
-        Prepare the spectrum effect.
-        
-        Args:
-            audio_analyzer: AudioAnalyzer instance with extracted features
-        """
-        # Nothing to prepare specifically
-        pass
-    
-    def get_filter_string(self) -> str:
-        """
-        Get the FFmpeg filter string for spectrum visualization.
-        
-        Returns:
-            String containing the FFmpeg showspectrum filter
-        """
-        # Use FFmpeg's showspectrum filter
-        spectrum_params = [
-            f"s={self.width}x{self.height}",
-            f"mode={self.mode}",
-            "color=intensity",
-            "scale=log",
-            f"x={self.x}",
-            f"y={self.y}"
-        ]
-        
-        # Add additional parameters
-        for key, value in self.params.items():
-            if key not in ['x', 'y', 'width', 'height', 'mode']:
-                spectrum_params.append(f"{key}={value}")
-        
-        # Create a split of the audio to visualize
-        return f"[0:a]showspectrum={':\\:'.join(spectrum_params)}[spectrum];[in][spectrum]overlay=0:0:format=auto"
-
-
-class EffectRegistry:
-    """
-    Registry for all available visual effects.
-    """
-    
-    def __init__(self):
-        self.effects = {
-            'text': TextEffect,
-            'logo': LogoEffect,
-            'waveform': WaveformEffect,
-            'spectrum': SpectrumEffect
+        return {
+            'name': self.name,
+            'type': self.__class__.__name__,
+            'order': self.order,
+            'enabled': self.enabled,
+            'audio_feature': self._audio_feature,
+            'feature_source': self._feature_source
         }
     
-    def register_effect(self, name: str, effect_class: type):
-        """
-        Register a new effect type.
+    @classmethod
+    def from_dict(cls, config: Dict[str, Any]) -> 'BaseEffect':
+        """Create an effect instance from a configuration dictionary.
         
         Args:
-            name: Name to register the effect under
-            effect_class: The effect class to register
-        """
-        if not issubclass(effect_class, BaseEffect):
-            raise TypeError("Effect class must inherit from BaseEffect")
+            config: Dictionary containing effect configuration.
             
-        self.effects[name] = effect_class
-        logger.debug(f"Registered new effect type: {name}")
-    
-    def create_effect(self, effect_type: str, **kwargs) -> BaseEffect:
+        Returns:
+            Instantiated effect object.
+            
+        Note:
+            This method should be implemented by subclasses.
         """
-        Create an instance of the specified effect type.
+        effect = cls(config['name'], config.get('order', 0))
+        effect.enabled = config.get('enabled', True)
+        if config.get('audio_feature'):
+            effect.set_audio_feature(
+                config['audio_feature'],
+                config.get('feature_source', 'amplitude')
+            )
+        return effect
+
+
+class LogoOverlayEffect(BaseEffect):
+    """Effect for adding a reactive logo overlay.
+    
+    This effect adds a logo image overlay that can react to audio features
+    through scaling, rotation, opacity, and position changes.
+    
+    Attributes:
+        logo_path (str): Path to the logo image file.
+        position (tuple): Position coordinates (x, y) or named position.
+        scale (float): Base scale factor for the logo.
+        opacity (float): Base opacity value (0.0-1.0).
+    """
+    
+    NAMED_POSITIONS = {
+        'top-left': (10, 10),
+        'top-center': ('(w-overlay_w)/2', 10),
+        'top-right': ('(w-overlay_w-10)', 10),
+        'center-left': (10, '(h-overlay_h)/2'),
+        'center': ('(w-overlay_w)/2', '(h-overlay_h)/2'),
+        'center-right': ('(w-overlay_w-10)', '(h-overlay_h)/2'),
+        'bottom-left': (10, '(h-overlay_h-10)'),
+        'bottom-center': ('(w-overlay_w)/2', '(h-overlay_h-10)'),
+        'bottom-right': ('(w-overlay_w-10)', '(h-overlay_h-10)')
+    }
+    
+    def __init__(self, 
+                 name: str, 
+                 logo_path: str,
+                 position: Union[Tuple[Union[int, str], Union[int, str]], str] = 'top-left',
+                 scale: float = 1.0,
+                 opacity: float = 1.0,
+                 order: int = 10):
+        """Initialize LogoOverlayEffect.
         
         Args:
-            effect_type: Type of effect to create
-            **kwargs: Parameters for the effect
+            name: Unique name for the effect.
+            logo_path: Path to the logo image file.
+            position: Position coordinates (x, y) or named position.
+            scale: Base scale factor for the logo.
+            opacity: Base opacity value (0.0-1.0).
+            order: Execution order priority.
+        """
+        super().__init__(name, order)
+        self.logo_path = logo_path
+        
+        # Handle named positions
+        if isinstance(position, str) and position in self.NAMED_POSITIONS:
+            self.position = self.NAMED_POSITIONS[position]
+        else:
+            self.position = position
+        
+        self.scale = scale
+        self.opacity = opacity
+        
+        # Effect modifiers
+        self._scale_min = scale
+        self._scale_max = scale
+        self._opacity_min = opacity
+        self._opacity_max = opacity
+        self._rotation = False
+        self._rotation_speed = 0
+    
+    def set_scale_range(self, min_scale: float, max_scale: float) -> 'LogoOverlayEffect':
+        """Set the scale range for audio reactivity.
+        
+        Args:
+            min_scale: Minimum scale factor.
+            max_scale: Maximum scale factor.
             
         Returns:
-            Instance of the requested effect
-            
-        Raises:
-            ValueError: If the effect type is not registered
+            Self for method chaining.
         """
-        if effect_type not in self.effects:
-            raise ValueError(f"Unknown effect type: {effect_type}")
-            
-        effect_class = self.effects[effect_type]
-        return effect_class(**kwargs)
+        self._scale_min = min_scale
+        self._scale_max = max_scale
+        return self
     
-    def list_effects(self) -> List[str]:
+    def set_opacity_range(self, min_opacity: float, max_opacity: float) -> 'LogoOverlayEffect':
+        """Set the opacity range for audio reactivity.
+        
+        Args:
+            min_opacity: Minimum opacity value (0.0-1.0).
+            max_opacity: Maximum opacity value (0.0-1.0).
+            
+        Returns:
+            Self for method chaining.
         """
-        List all registered effect types.
+        self._opacity_min = max(0.0, min(1.0, min_opacity))
+        self._opacity_max = max(0.0, min(1.0, max_opacity))
+        return self
+    
+    def enable_rotation(self, speed: float = 1.0) -> 'LogoOverlayEffect':
+        """Enable rotation animation.
+        
+        Args:
+            speed: Rotation speed factor.
+            
+        Returns:
+            Self for method chaining.
+        """
+        self._rotation = True
+        self._rotation_speed = speed
+        return self
+    
+    def generate_filter_commands(self, sync_data: Dict[str, Any]) -> List[str]:
+        """Generate FFmpeg filter commands for logo overlay effect.
+        
+        Args:
+            sync_data: Dictionary containing synchronized audio features.
+            
+        Returns:
+            List of FFmpeg filter strings.
+        """
+        if not os.path.exists(self.logo_path):
+            raise ValueError(f"Logo file not found: {self.logo_path}")
+        
+        # Get feature data for reactivity
+        feature_data = self.get_feature_data(sync_data)
+        n_frames = sync_data['n_frames']
+        
+        # Create temporary data file for frame-by-frame parameters
+        fd, data_file = tempfile.mkstemp(suffix='.txt')
+        os.close(fd)
+        
+        # Generate frame data
+        with open(data_file, 'w') as f:
+            for frame in range(n_frames):
+                # Calculate scale based on audio feature
+                if self._scale_min != self._scale_max:
+                    feature_val = feature_data[frame] if frame < len(feature_data) else 0
+                    scale = self._scale_min + (self._scale_max - self._scale_min) * feature_val
+                else:
+                    scale = self._scale
+                
+                # Calculate opacity based on audio feature
+                if self._opacity_min != self._opacity_max:
+                    feature_val = feature_data[frame] if frame < len(feature_data) else 0
+                    opacity = self._opacity_min + (self._opacity_max - self._opacity_min) * feature_val
+                else:
+                    opacity = self.opacity
+                
+                # Calculate rotation angle if enabled
+                if self._rotation:
+                    angle = (frame * self._rotation_speed) % 360
+                else:
+                    angle = 0
+                
+                # Write frame data
+                f.write(f"{frame} {scale} {opacity} {angle}\n")
+        
+        # Generate filter commands
+        filters = []
+        
+        # Input for logo
+        filters.append(f"[0:v]" + \
+                      f"[main];" + \
+                      f"movie='{self.logo_path}'" + \
+                      f"[logo]")
+        
+        # Setup sendcmd filter for frame-by-frame control
+        filters.append(f"[logo]sendcmd=f='{data_file}':" + \
+                      f"c='f=${frame} scale${scale} opacity${opacity} angle${angle}';" + \
+                      f"scale=iw*${scale}:ih*${scale}," + \
+                      f"rotate=${angle}*PI/180:c=0x00000000:ow=rotw(${angle}*PI/180):oh=roth(${angle}*PI/180)," + \
+                      f"format=rgba,colorchannelmixer=aa=${opacity}" + \
+                      f"[scaledlogo]")
+        
+        # Overlay logo on main video
+        x, y = self.position
+        filters.append(f"[main][scaledlogo]overlay={x}:{y}:" + \
+                      f"shortest=1:format=rgb" + \
+                      f"[out]")
+        
+        return filters
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert effect configuration to a dictionary.
         
         Returns:
-            List of registered effect type names
+            Dictionary representation of the effect configuration.
         """
-        return list(self.effects.keys())
+        config = super().to_dict()
+        config.update({
+            'logo_path': self.logo_path,
+            'position': self.position,
+            'scale': self.scale,
+            'opacity': self.opacity,
+            'scale_min': self._scale_min,
+            'scale_max': self._scale_max,
+            'opacity_min': self._opacity_min,
+            'opacity_max': self._opacity_max,
+            'rotation': self._rotation,
+            'rotation_speed': self._rotation_speed
+        })
+        return config
+    
+    @classmethod
+    def from_dict(cls, config: Dict[str, Any]) -> 'LogoOverlayEffect':
+        """Create a LogoOverlayEffect instance from a configuration dictionary.
+        
+        Args:
+            config: Dictionary containing effect configuration.
+            
+        Returns:
+            Instantiated LogoOverlayEffect object.
+        """
+        effect = cls(
+            config['name'],
+            config['logo_path'],
+            config.get('position', 'top-left'),
+            config.get('scale', 1.0),
+            config.get('opacity', 1.0),
+            config.get('order', 10)
+        )
+        
+        # Apply scale range if specified
+        if 'scale_min' in config and 'scale_max' in config:
+            effect.set_scale_range(config['scale_min'], config['scale_max'])
+        
+        # Apply opacity range if specified
+        if 'opacity_min' in config and 'opacity_max' in config:
+            effect.set_opacity_range(config['opacity_min'], config['opacity_max'])
+        
+        # Enable rotation if specified
+        if config.get('rotation', False):
+            effect.enable_rotation(config.get('rotation_speed', 1.0))
+        
+        # Set audio feature if specified
+        if config.get('audio_feature'):
+            effect.set_audio_feature(
+                config['audio_feature'],
+                config.get('feature_source', 'amplitude')
+            )
+        
+        return effect
+
+
+class TextOverlayEffect(BaseEffect):
+    """Effect for adding reactive text overlay.
+    
+    This effect adds text overlay that can react to audio features through
+    opacity, scale, and color changes.
+    
+    Attributes:
+        text (str): The text to display.
+        font_path (str): Path to the font file.
+        position (tuple): Position coordinates (x, y) or named position.
+        font_size (int): Base font size.
+        font_color (str): Base font color in hex format (#RRGGBB).
+        opacity (float): Base opacity value (0.0-1.0).
+    """
+    
+    NAMED_POSITIONS = LogoOverlayEffect.NAMED_POSITIONS
+    
+    def __init__(self, 
+                 name: str, 
+                 text: str,
+                 font_path: str,
+                 position: Union[Tuple[Union[int, str], Union[int, str]], str] = 'bottom-center',
+                 font_size: int = 32,
+                 font_color: str = '#FFFFFF',
+                 opacity: float = 1.0,
+                 order: int = 20):
+        """Initialize TextOverlayEffect.
+        
+        Args:
+            name: Unique name for the effect.
+            text: The text to display.
+            font_path: Path to the font file.
+            position: Position coordinates (x, y) or named position.
+            font_size: Base font size.
+            font_color: Base font color in hex format (#RRGGBB).
+            opacity: Base opacity value (0.0-1.0).
+            order: Execution order priority.
+        """
+        super().__init__(name, order)
+        self.text = text
+        self.font_path = font_path
+        
+        # Handle named positions
+        if isinstance(position, str) and position in self.NAMED_POSITIONS:
+            self.position = self.NAMED_POSITIONS[position]
+        else:
+            self.position = position
+        
+        self.font_size = font_size
+        self.font_color = font_color
+        self.opacity = opacity
+        
+        # Effect modifiers
+        self._opacity_min = opacity
+        self._opacity_max = opacity
+        self._color_shift = False
+        self._glow = False
+        self._glow_color = '#00FFFF'
+        self._bg_box = False
+        self._bg_color = '#000000'
+        self._bg_opacity = 0.5
+    
+    def set_opacity_range(self, min_opacity: float, max_opacity: float) -> 'TextOverlayEffect':
+        """Set the opacity range for audio reactivity.
+        
+        Args:
+            min_opacity: Minimum opacity value (0.0-1.0).
+            max_opacity: Maximum opacity value (0.0-1.0).
+            
+        Returns:
+            Self for method chaining.
+        """
+        self._opacity_min = max(0.0, min(1.0, min_opacity))
+        self._opacity_max = max(0.0, min(1.0, max_opacity))
+        return self
+    
+    def enable_color_shift(self) -> 'TextOverlayEffect':
+        """Enable color shifting effect based on audio intensity.
+        
+        Returns:
+            Self for method chaining.
+        """
+        self._color_shift = True
+        return self
+    
+    def enable_glow(self, glow_color: str = '#00FFFF') -> 'TextOverlayEffect':
+        """Enable glow effect around text.
+        
+        Args:
+            glow_color: Color for the glow effect in hex format (#RRGGBB).
+            
+        Returns:
+            Self for method chaining.
+        """
+        self._glow = True
+        self._glow_color = glow_color
+        return self
+    
+    def enable_background_box(self, 
+                             bg_color: str = '#000000', 
+                             bg_opacity: float = 0.5) -> 'TextOverlayEffect':
+        """Enable background box behind text.
+        
+        Args:
+            bg_color: Background color in hex format (#RRGGBB).
+            bg_opacity: Background opacity (0.0-1.0).
+            
+        Returns:
+            Self for method chaining.
+        """
+        self._bg_box = True
+        self._bg_color = bg_color
+        self._bg_opacity = max(0.0, min(1.0, bg_opacity))
+        return self
+    
+    def generate_filter_commands(self, sync_data: Dict[str, Any]) -> List[str]:
+        """Generate FFmpeg filter commands for text overlay effect.
+        
+        Args:
+            sync_data: Dictionary containing synchronized audio features.
+            
+        Returns:
+            List of FFmpeg filter strings.
+        """
+        if not os.path.exists(self.font_path):
+            raise ValueError(f"Font file not found: {self.font_path}")
+        
+        # Get feature data for reactivity
+        feature_data = self.get_feature_data(sync_data)
+        n_frames = sync_data['n_frames']
+        
+        # Create temporary data file for frame-by-frame parameters
+        fd, data_file = tempfile.mkstemp(suffix='.txt')
+        os.close(fd)
+        
+        # Generate frame data
+        with open(data_file, 'w') as f:
+            for frame in range(n_frames):
+                # Calculate opacity based on audio feature
+                if self._opacity_min != self._opacity_max:
+                    feature_val = feature_data[frame] if frame < len(feature_data) else 0
+                    opacity = self._opacity_min + (self._opacity_max - self._opacity_min) * feature_val
+                else:
+                    opacity = self.opacity
+                
+                # Calculate color if color shift is enabled
+                if self._color_shift:
+                    feature_val = feature_data[frame] if frame < len(feature_data) else 0
+                    # Shift from white to red based on intensity
+                    r = 255
+                    g = max(0, int(255 * (1 - feature_val)))
+                    b = max(0, int(255 * (1 - feature_val)))
+                    color = f"#{r:02x}{g:02x}{b:02x}"
+                else:
+                    color = self.font_color
+                
+                # Write frame data
+                f.write(f"{frame} {opacity} {color}\n")
+        
+        # Generate filter commands
+        filters = []
+        
+        # Main video input
+        filters.append(f"[0:v][main]")
+        
+        # Create text overlay
+        text_filter = f"drawtext=text='{self.text}':" + \
+                      f"fontfile='{self.font_path}':" + \
+                      f"fontsize={self.font_size}:" + \
+                      f"fontcolor=${{color}}@${{opacity}}:"
+        
+        # Add position parameters
+        x, y = self.position
+        text_filter += f"x={x}:y={y}:"
+        
+        # Add background box if enabled
+        if self._bg_box:
+            text_filter += f"box=1:" + \
+                          f"boxcolor={self._bg_color}@{self._bg_opacity}:" + \
+                          f"boxborderw=5:"
+        
+        # Add glow if enabled
+        if self._glow:
+            # Add a shadow with the glow color
+            text_filter += f"shadowcolor={self._glow_color}@0.5:" + \
+                          f"shadowx=2:shadowy=2:"
+        
+        # Add sendcmd for frame-by-frame control
+        text_filter += f"sendcmd=f='{data_file}':" + \
+                      f"c='f=${frame} opacity=${opacity} color=${color}'"        
+        
+        filters.append(f"[main]{text_filter}[out]")
+        
+        return filters
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert effect configuration to a dictionary.
+        
+        Returns:
+            Dictionary representation of the effect configuration.
+        """
+        config = super().to_dict()
+        config.update({
+            'text': self.text,
+            'font_path': self.font_path,
+            'position': self.position,
+            'font_size': self.font_size,
+            'font_color': self.font_color,
+            'opacity': self.opacity,
+            'opacity_min': self._opacity_min,
+            'opacity_max': self._opacity_max,
+            'color_shift': self._color_shift,
+            'glow': self._glow,
+            'glow_color': self._glow_color,
+            'bg_box': self._bg_box,
+            'bg_color': self._bg_color,
+            'bg_opacity': self._bg_opacity
+        })
+        return config
+    
+    @classmethod
+    def from_dict(cls, config: Dict[str, Any]) -> 'TextOverlayEffect':
+        """Create a TextOverlayEffect instance from a configuration dictionary.
+        
+        Args:
+            config: Dictionary containing effect configuration.
+            
+        Returns:
+            Instantiated TextOverlayEffect object.
+        """
+        effect = cls(
+            config['name'],
+            config['text'],
+            config['font_path'],
+            config.get('position', 'bottom-center'),
+            config.get('font_size', 32),
+            config.get('font_color', '#FFFFFF'),
+            config.get('opacity', 1.0),
+            config.get('order', 20)
+        )
+        
+        # Apply opacity range if specified
+        if 'opacity_min' in config and 'opacity_max' in config:
+            effect.set_opacity_range(config['opacity_min'], config['opacity_max'])
+        
+        # Enable color shift if specified
+        if config.get('color_shift', False):
+            effect.enable_color_shift()
+        
+        # Enable glow if specified
+        if config.get('glow', False):
+            effect.enable_glow(config.get('glow_color', '#00FFFF'))
+        
+        # Enable background box if specified
+        if config.get('bg_box', False):
+            effect.enable_background_box(
+                config.get('bg_color', '#000000'),
+                config.get('bg_opacity', 0.5)
+            )
+        
+        # Set audio feature if specified
+        if config.get('audio_feature'):
+            effect.set_audio_feature(
+                config['audio_feature'],
+                config.get('feature_source', 'amplitude')
+            )
+        
+        return effect
+
+
+class SpectrumVisualizerEffect(BaseEffect):
+    """Effect for adding a spectrum visualizer.
+    
+    This effect adds an audio spectrum visualizer that shows frequency bands
+    as a bar graph or waveform.
+    
+    Attributes:
+        position (tuple): Position coordinates (x, y).
+        width (int): Width of the visualizer.
+        height (int): Height of the visualizer.
+        bands (int): Number of frequency bands to display.
+        mode (str): Visualization mode ('bars' or 'wave').
+        color (str): Base color in hex format (#RRGGBB).
+    """
+    
+    NAMED_POSITIONS = LogoOverlayEffect.NAMED_POSITIONS
+    
+    def __init__(self, 
+                 name: str, 
+                 position: Union[Tuple[Union[int, str], Union[int, str]], str] = 'bottom-center',
+                 width: int = 640,
+                 height: int = 120,
+                 bands: int = 32,
+                 mode: str = 'bars',
+                 color: str = '#FFFFFF',
+                 opacity: float = 0.8,
+                 order: int = 30):
+        """Initialize SpectrumVisualizerEffect.
+        
+        Args:
+            name: Unique name for the effect.
+            position: Position coordinates (x, y) or named position.
+            width: Width of the visualizer.
+            height: Height of the visualizer.
+            bands: Number of frequency bands to display.
+            mode: Visualization mode ('bars' or 'wave').
+            color: Base color in hex format (#RRGGBB).
+            opacity: Base opacity value (0.0-1.0).
+            order: Execution order priority.
+        """
+        super().__init__(name, order)
+        
+        # Handle named positions
+        if isinstance(position, str) and position in self.NAMED_POSITIONS:
+            self.position = self.NAMED_POSITIONS[position]
+        else:
+            self.position = position
+        
+        self.width = width
+        self.height = height
+        self.bands = bands
+        self.mode = mode
+        self.color = color
+        self.opacity = opacity
+        
+        # Effect modifiers
+        self._rainbow = False
+        self._mirror = False
+        self._bar_width = width // bands
+        self._bar_gap = 1
+    
+    def enable_rainbow(self) -> 'SpectrumVisualizerEffect':
+        """Enable rainbow color effect.
+        
+        Returns:
+            Self for method chaining.
+        """
+        self._rainbow = True
+        return self
+    
+    def enable_mirror(self) -> 'SpectrumVisualizerEffect':
+        """Enable mirrored visualization.
+        
+        Returns:
+            Self for method chaining.
+        """
+        self._mirror = True
+        return self
+    
+    def set_bar_style(self, width: int, gap: int) -> 'SpectrumVisualizerEffect':
+        """Set the bar style for bar mode.
+        
+        Args:
+            width: Width of each bar.
+            gap: Gap between bars.
+            
+        Returns:
+            Self for method chaining.
+        """
+        self._bar_width = width
+        self._bar_gap = gap
+        return self
+    
+    def generate_filter_commands(self, sync_data: Dict[str, Any]) -> List[str]:
+        """Generate FFmpeg filter commands for spectrum visualizer effect.
+        
+        Args:
+            sync_data: Dictionary containing synchronized audio features.
+            
+        Returns:
+            List of FFmpeg filter strings.
+        """
+        # Check if we have frequency bands data
+        if 'freq_bands' not in sync_data['features']:
+            raise ValueError("Frequency bands data required for spectrum visualizer")
+        
+        # Generate filter commands
+        filters = []
+        
+        # Main video input
+        filters.append(f"[0:v][main]")
+        
+        # Create a transparent background for the visualizer
+        filters.append(f"color=s={self.width}x{self.height}:c=#00000000,format=rgba[spectrum_bg]")
+        
+        # Select appropriate FFmpeg filter based on mode
+        if self.mode == 'bars':
+            # Use showspectrum filter for bars
+            spectrum_filter = f"showspectrum=s={self.width}x{self.height}:" + \
+                            f"mode=bar:color={self.color}:scale=lin:" + \
+                            f"slide=replace:saturation=1:opacity={self.opacity}"
+            
+            if self._rainbow:
+                spectrum_filter += f":color=rainbow"
+            
+            if self._mirror:
+                spectrum_filter += f":mirror=1"
+        
+        elif self.mode == 'wave':
+            # Use showwaves filter for waveform
+            spectrum_filter = f"showwaves=s={self.width}x{self.height}:" + \
+                            f"mode=line:n={self.bands}:scale=sqrt:" + \
+                            f"colors={self.color}:opacity={self.opacity}"
+            
+            if self._mirror:
+                spectrum_filter += f":mirror=1"
+        
+        else:
+            raise ValueError(f"Unsupported visualization mode: {self.mode}")
+        
+        # Apply spectrum filter to audio
+        filters.append(f"[0:a]{spectrum_filter}[spectrum]")
+        
+        # Overlay spectrum on main video
+        x, y = self.position
+        filters.append(f"[main][spectrum]overlay={x}:{y}[out]")
+        
+        return filters
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert effect configuration to a dictionary.
+        
+        Returns:
+            Dictionary representation of the effect configuration.
+        """
+        config = super().to_dict()
+        config.update({
+            'position': self.position,
+            'width': self.width,
+            'height': self.height,
+            'bands': self.bands,
+            'mode': self.mode,
+            'color': self.color,
+            'opacity': self.opacity,
+            'rainbow': self._rainbow,
+            'mirror': self._mirror,
+            'bar_width': self._bar_width,
+            'bar_gap': self._bar_gap
+        })
+        return config
+    
+    @classmethod
+    def from_dict(cls, config: Dict[str, Any]) -> 'SpectrumVisualizerEffect':
+        """Create a SpectrumVisualizerEffect instance from a configuration dictionary.
+        
+        Args:
+            config: Dictionary containing effect configuration.
+            
+        Returns:
+            Instantiated SpectrumVisualizerEffect object.
+        """
+        effect = cls(
+            config['name'],
+            config.get('position', 'bottom-center'),
+            config.get('width', 640),
+            config.get('height', 120),
+            config.get('bands', 32),
+            config.get('mode', 'bars'),
+            config.get('color', '#FFFFFF'),
+            config.get('opacity', 0.8),
+            config.get('order', 30)
+        )
+        
+        # Enable rainbow if specified
+        if config.get('rainbow', False):
+            effect.enable_rainbow()
+        
+        # Enable mirror if specified
+        if config.get('mirror', False):
+            effect.enable_mirror()
+        
+        # Set bar style if specified
+        if 'bar_width' in config and 'bar_gap' in config:
+            effect.set_bar_style(config['bar_width'], config['bar_gap'])
+        
+        # Set audio feature if specified
+        if config.get('audio_feature'):
+            effect.set_audio_feature(
+                config['audio_feature'],
+                config.get('feature_source', 'amplitude')
+            )
+        
+        return effect
+
+
+# Register all effect classes for easy access
+EFFECT_REGISTRY = {
+    'LogoOverlayEffect': LogoOverlayEffect,
+    'TextOverlayEffect': TextOverlayEffect,
+    'SpectrumVisualizerEffect': SpectrumVisualizerEffect
+}
+
+
+def create_effect(effect_type: str, *args, **kwargs) -> BaseEffect:
+    """Create an effect instance by type name.
+    
+    Args:
+        effect_type: Name of the effect class to create.
+        *args: Positional arguments to pass to the effect constructor.
+        **kwargs: Keyword arguments to pass to the effect constructor.
+        
+    Returns:
+        Instantiated effect object.
+        
+    Raises:
+        ValueError: If effect_type is not registered.
+    """
+    if effect_type not in EFFECT_REGISTRY:
+        raise ValueError(f"Unknown effect type: {effect_type}")
+    
+    return EFFECT_REGISTRY[effect_type](*args, **kwargs)
+
+
+def effect_from_dict(config: Dict[str, Any]) -> BaseEffect:
+    """Create an effect instance from a configuration dictionary.
+    
+    Args:
+        config: Dictionary containing effect configuration.
+        
+    Returns:
+        Instantiated effect object.
+        
+    Raises:
+        ValueError: If effect type is not registered.
+    """
+    effect_type = config.get('type')
+    if not effect_type or effect_type not in EFFECT_REGISTRY:
+        raise ValueError(f"Unknown or missing effect type: {effect_type}")
+    
+    return EFFECT_REGISTRY[effect_type].from_dict(config)
