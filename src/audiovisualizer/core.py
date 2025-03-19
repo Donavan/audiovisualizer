@@ -151,25 +151,8 @@ class AudioVisualOverlay:
             self.exporter.set_video(self.video)
             
         return self
-    
-    def export(self, output_path, fps=None, threads=None):
-        """Export the processed video
-        
-        Args:
-            output_path: Path to save the output video
-            fps: Frames per second (optional)
-            threads: Number of CPU threads to use for processing (default: auto-detect)
-            
-        Returns:
-            str: Path to the exported video
-        """
-        if not self.video:
-            logger.error("No video loaded.")
-            return None
-            
-        return self.exporter.export(output_path, fps=fps, threads=threads)
-    
-    def export_gpu_optimized(self, output_path, quality='balanced', threads=None):
+
+    def export(self, output_path, quality='balanced', threads=None):
         """Export using GPU acceleration if available
         
         Args:
@@ -184,4 +167,4 @@ class AudioVisualOverlay:
             logger.error("No video loaded.")
             return None
             
-        return self.exporter.export_gpu_optimized(output_path, quality=quality, threads=threads)
+        return self.exporter.export(output_path, quality=quality, threads=threads)

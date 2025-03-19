@@ -349,14 +349,8 @@ def main():
     # Export the final video with optimized settings
     tracker.start_checkpoint("Video export")
     print(f"Exporting video to: {OUTPUT_PATH}")
-    
-    # Export with the updated export_gpu_optimized method passing the thread count
-    if args.use_gpu:
-        overlay.export_gpu_optimized(OUTPUT_PATH, quality=args.quality, threads=args.threads)
-    else:
-        # Use the updated export method with threads parameter
-        overlay.export(OUTPUT_PATH, threads=args.threads)
-    
+
+    overlay.export(OUTPUT_PATH, quality=args.quality, threads=args.threads)
     tracker.end_checkpoint()
     
     # Print performance summary
