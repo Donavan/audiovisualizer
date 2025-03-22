@@ -154,36 +154,97 @@ class FFmpegProcessor:
             return output_path
         except Exception as e:
             raise FFmpegError(f"Failed to extract audio: {str(e)}")
-    
+
+    def sanitize_filter_chain(self, filter_chain: str) -> str:
+        """Sanitize a filter chain string by removing redundant parts.
+
+        Args:
+            filter_chain: The filter chain string to sanitize.
+
+        Returns:
+            A sanitized filter chain string.
+        """
+        # Remove empty filter chains
+        if not filter_chain or not filter_chain.strip():
+            return ""
+
+        chain = filter_chain.strip()
+
+        # Skip chains that are just input/output labels without actual filters
+        if chain.count('[') >= 2 and ']' in chain and not any(op in chain for op in 
+                                                             ['=', 'filter', 'scale', 'overlay', 
+                                                              'drawtext', 'movie', 'color']):
+            return ""
+
+        return chain
+
     def build_complex_filter(self, filter_chains: List[str]) -> str:
-        """Build a complex filtergraph string from individual filter chains.
-        
+        """Build a complex filtergraph string that properly chains filters.
+
         Args:
             filter_chains: List of filter chain strings.
-            
+
         Returns:
             A complete complex filtergraph string.
-            
-        Note:
-            Filters that are empty or only contain input/output pad definitions
-            without actual filter operations will be skipped.
+
+        Raises:
+            FFmpegError: If filter chains cannot be properly connected.
         """
-        valid_chains = []
-        
-        for chain in filter_chains:
-            # Skip empty chains
-            if not chain.strip():
-                continue
+        # If there are no filter chains, return an empty string
+        if not filter_chains:
+            return ""
+
+        # Filter out empty chains and properly clean each chain
+        valid_chains = [self.sanitize_filter_chain(chain) for chain in filter_chains]
+        valid_chains = [chain for chain in valid_chains if chain]
+
+        # If there are no valid chains after cleaning, return an empty string
+        if not valid_chains:
+            return ""
+
+        # Prepare the initial format filter to establish the main input
+        # This standardizes the input format and establishes [main] as our starting point
+        result = ["[0:v]format=yuv420p,setpts=PTS-STARTPTS[main]"]
+
+        # If we only have one filter chain, it needs to start with [main] and end with [out]
+        if len(valid_chains) == 1:
+            chain = valid_chains[0]
+            
+            # Extract the filter part (remove input/output labels if present)
+            filter_parts = chain.split(']')
+            if len(filter_parts) > 1 and '[' in filter_parts[0]:
+                # This chain has input/output labels, so we need to adjust them
+                filter_content = filter_parts[-1].strip()
+                # Only append if there's actual filter content
+                if filter_content:
+                    result.append(f"[main]{filter_content}[out]")
+            else:
+                # No labels, so wrap the filter content with [main] and [out]
+                result.append(f"[main]{chain}[out]")
+        else:
+            # For multiple chains, we need to create a sequence of labeled inputs/outputs
+            current_input = "main"
+            
+            for i, chain in enumerate(valid_chains):
+                # Determine the output label for this filter
+                output_label = "out" if i == len(valid_chains) - 1 else f"tmp{i}"
                 
-            # Skip chains that only contain pad definitions without filter operations
-            # Pattern: only contains [label] definitions without actual filter commands
-            if all(part.startswith('[') and part.endswith(']') for part in chain.split() if part):
-                continue
-                
-            # Add valid chain
-            valid_chains.append(chain)
-        
-        return ';'.join(valid_chains)
+                # Extract filter content (remove input/output labels if present)
+                filter_parts = chain.split(']')
+                if len(filter_parts) > 1 and '[' in filter_parts[0]:
+                    # This chain has input/output labels, so we extract just the filter content
+                    filter_content = filter_parts[-1].strip()
+                    # Only append if there's actual filter content
+                    if filter_content:
+                        result.append(f"[{current_input}]{filter_content}[{output_label}]")
+                        current_input = output_label
+                else:
+                    # No labels, so use the whole chain as filter content
+                    result.append(f"[{current_input}]{chain}[{output_label}]")
+                    current_input = output_label
+
+        # Join all filter parts with semicolons
+        return ";".join(result)
     
     def build_overlay_filter(self,
                            main_input: str,
