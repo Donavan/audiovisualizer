@@ -67,6 +67,16 @@ class FilterRegistry:
 
     def _register_builtin_filters(self) -> None:
         """Register built-in FFmpeg filters."""
+        # Register buffer_src as a special source filter (required for input streams)
+        self.register_filter('buffer_src', {
+            'min_inputs': 0,
+            'max_inputs': 0,
+            'min_outputs': 1,
+            'max_outputs': 1,
+            'required_params': [],
+            'optional_params': [],
+        })
+        
         # Common video filters
         self.register_filter('format', {
             'min_inputs': 1,
@@ -140,4 +150,4 @@ class FilterRegistry:
             'optional_params': [],
         })
         
-        # Add more filters as needed...
+        # Add more filters as needed

@@ -12,17 +12,17 @@ class EffectFilterMapper:
     """Maps high-level effects to filter graph nodes."""
 
     def __init__(self, visualizer):
-        """Initialize the mapper with a reference to the AudioVisualizer instance.
-        
-        Args:
-            visualizer: The AudioVisualizer instance
-        """
+        """Initialize the mapper with a reference to the AudioVisualizer instance."""
         self.visualizer = visualizer
         self.graph = FilterGraph()
 
-        # Create the initial format filter node
+        # Create a special buffer_src node as the input
+        input_node = self.graph.create_node('buffer_src', 'input')
+        self.graph.set_input('0:v', input_node)
+
+        # Create the format filter and connect it to our input
         self.format_node = self.graph.create_node('format', 'format', {'pix_fmt': 'yuva420p'})
-        self.graph.set_input('0:v', self.format_node, 0)
+        self.graph.connect(input_node, self.format_node)
 
         # Set the current node to the format node
         self.current_node = self.format_node
