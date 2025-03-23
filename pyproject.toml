@@ -4,26 +4,51 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "audiovisualizer"
-version = "0.1.0"
-authors = [
-    {name = "Your Name", email = "your.email@example.com"},
-]
-description = "A package for creating reactive audio-visual overlays for videos"
+version = "0.2.0"
+description = "Create audio-reactive visual effects for videos"
+authors = [{name = "Developer", email = "dev@example.com"}]
+license = {text = "MIT"}
 readme = "README.md"
 requires-python = ">=3.8"
-classifiers = [
-    "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
-    "Operating System :: OS Independent",
-]
 dependencies = [
-    "numpy",
-    "pillow",
-    "moviepy",
-    "librosa",
-    "psutil"
+    "numpy>=1.24.0",
+    "librosa>=0.10.0",
+    "matplotlib>=3.7.0",
+    "opencv-python>=4.8.0",
+    "pillow>=9.0.0",
 ]
 
-[project.urls]
-"Homepage" = "https://github.com/yourusername/audiovisualizer"
-"Bug Tracker" = "https://github.com/yourusername/audiovisualizer/issues"
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.0.0",
+    "mypy>=1.0.0",
+]
+
+[tool.pytest.ini_options]
+markers = [
+    "unit: mark a test as a unit test",
+    "integration: mark a test as an integration test",
+]
+testpaths = ["tests"]
+
+[tool.black]
+line-length = 100
+target-version = ['py38']
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+
+[[tool.mypy.overrides]]
+module = ["librosa.*", "matplotlib.*", "cv2.*"]
+ignore_missing_imports = true

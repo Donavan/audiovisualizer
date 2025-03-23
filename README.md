@@ -154,6 +154,47 @@ dot = FilterGraphVisualizer.visualize(graph, "filter_graph")
 print(f"Graph visualization saved to filter_graph.dot")
 ```
 
+## Development and Testing
+
+### Setting Up Development Environment
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/audiovisualizer.git
+cd audiovisualizer
+
+# Install in development mode with test dependencies
+pip install -e ".[dev]"
+```
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run only unit tests
+pytest -m unit
+
+# Run only integration tests
+pytest -m integration
+
+# Run tests with coverage report
+pytest --cov=src/audiovisualizer --cov-report=term-missing
+```
+
+### Test Structure
+
+The tests are organized following the package structure:
+
+- `tests/` - Root test directory
+  - `conftest.py` - Shared test fixtures
+  - `test_*.py` - Tests for top-level modules
+  - `ffmpeg_filter_graph/` - Tests for the filter graph module
+    - `test_*.py` - Tests for individual filter graph components
+  - `integration/` - Integration tests
+    - `test_end_to_end.py` - Complete pipeline tests
+
 ## License
 
 MIT License
