@@ -48,7 +48,8 @@ class FilterNode:
         if source:
             # Store the connection information correctly
             self.inputs.append((source, pad_index))  # Which source node and which pad on THIS node to use
-            source.outputs.append((self, source_pad))  # Tell source node it's connected to us from its output pad
+            source.outputs.append((self, pad_index))  # Tell source it's connected to us at our input pad
+
         else:
             # Handle external inputs (None source)
             self.inputs.append((None, pad_index))  # Store the input pad index for this external input

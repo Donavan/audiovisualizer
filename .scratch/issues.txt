@@ -7,7 +7,7 @@ collected 59 items / 19 deselected / 40 selected
 
 tests\ffmpeg_filter_graph\test_core.py ..F....                           [ 17%]
 tests\ffmpeg_filter_graph\test_filter_graph.py ...F.F...........         [ 60%]
-tests\ffmpeg_filter_graph\test_filter_node.py ...F.F...F......           [100%]
+tests\ffmpeg_filter_graph\test_filter_node.py ...F.....F......           [100%]
 
 ================================== FAILURES ===================================
 ________________________ test_filter_node_connections _________________________
@@ -33,16 +33,18 @@ ________________________ test_filter_node_connections _________________________
         node3.add_input(node1, 1, 0)  # Connect node1 to node3's pad 1
     
         assert len(node3.inputs) == 1
->       assert node3.inputs[0] == (node1, 1)
-E       assert (<audiovisual...9BFA550C0>, 0) == (<audiovisual...9BFA550C0>, 1)
+        assert node3.inputs[0] == (node1, 1)
+        assert len(node1.outputs) == 2
+>       assert node1.outputs[1] == (node3, 0)
+E       assert (<audiovisual...7887F72E0>, 1) == (<audiovisual...7887F72E0>, 0)
 E         
-E         At index 1 diff: 0 != 1
+E         At index 1 diff: 1 != 0
 E         Use -v to get more diff
 
-tests\ffmpeg_filter_graph\test_core.py:69: AssertionError
+tests\ffmpeg_filter_graph\test_core.py:71: AssertionError
 _____________________ TestFilterGraph.test_connect_method _____________________
 
-self = <tests.ffmpeg_filter_graph.test_filter_graph.TestFilterGraph object at 0x00000209BFA565F0>
+self = <tests.ffmpeg_filter_graph.test_filter_graph.TestFilterGraph object at 0x00000247889EA470>
 
     def test_connect_method(self):
         """Test the connect method for creating connections between nodes."""
@@ -69,16 +71,18 @@ self = <tests.ffmpeg_filter_graph.test_filter_graph.TestFilterGraph object at 0x
         graph.connect(node2, node3, source_pad=1, target_pad=2)
     
         assert len(node3.inputs) == 1
->       assert node3.inputs[0] == (node2, 2)
-E       assert (<audiovisual...9BFB4BC40>, 1) == (<audiovisual...9BFB4BC40>, 2)
+        assert node3.inputs[0] == (node2, 2)
+        assert len(node2.outputs) == 1
+>       assert node2.outputs[0] == (node3, 1)
+E       assert (<audiovisual...788AD1330>, 2) == (<audiovisual...788AD1330>, 1)
 E         
-E         At index 1 diff: 1 != 2
+E         At index 1 diff: 2 != 1
 E         Use -v to get more diff
 
-tests\ffmpeg_filter_graph\test_filter_graph.py:110: AssertionError
+tests\ffmpeg_filter_graph\test_filter_graph.py:112: AssertionError
 ____________ TestFilterGraph.test_complex_graph_structure_building ____________
 
-self = <tests.ffmpeg_filter_graph.test_filter_graph.TestFilterGraph object at 0x00000209BFA568F0>
+self = <tests.ffmpeg_filter_graph.test_filter_graph.TestFilterGraph object at 0x00000247889EA770>
 
     def test_complex_graph_structure_building(self):
         """Test building a complex graph structure."""
@@ -107,20 +111,16 @@ self = <tests.ffmpeg_filter_graph.test_filter_graph.TestFilterGraph object at 0x
     
         # split -> scale1, split -> scale2
         assert scale1_node.inputs[0] == (split_node, 0)
-        assert scale2_node.inputs[0] == (split_node, 1)
-    
-        # scale1 -> overlay (pad 0), scale2 -> overlay (pad 1)
-        assert overlay_node.inputs[0] == (scale1_node, 0)
->       assert overlay_node.inputs[1] == (scale2_node, 1)
-E       assert (<audiovisual...9BFB4E500>, 0) == (<audiovisual...9BFB4E500>, 1)
+>       assert scale2_node.inputs[0] == (split_node, 1)
+E       assert (<audiovisual...788AD84C0>, 0) == (<audiovisual...788AD84C0>, 1)
 E         
 E         At index 1 diff: 0 != 1
 E         Use -v to get more diff
 
-tests\ffmpeg_filter_graph\test_filter_graph.py:166: AssertionError
+tests\ffmpeg_filter_graph\test_filter_graph.py:162: AssertionError
 _________________ TestFilterNode.test_add_input_functionality _________________
 
-self = <tests.ffmpeg_filter_graph.test_filter_node.TestFilterNode object at 0x00000209BFA566E0>
+self = <tests.ffmpeg_filter_graph.test_filter_node.TestFilterNode object at 0x00000247889EA560>
 
     def test_add_input_functionality(self):
         """Test the add_input method."""
@@ -145,44 +145,18 @@ self = <tests.ffmpeg_filter_graph.test_filter_node.TestFilterNode object at 0x00
         target2.add_input(source, pad_index=1, source_pad=0)
     
         assert len(target2.inputs) == 1
->       assert target2.inputs[0] == (source, 1)
-E       assert (<audiovisual...9BFB49BA0>, 0) == (<audiovisual...9BFB49BA0>, 1)
+        assert target2.inputs[0] == (source, 1)
+        assert len(source.outputs) == 2
+>       assert source.outputs[1] == (target2, 0)
+E       assert (<audiovisual...788B21870>, 1) == (<audiovisual...788B21870>, 0)
 E         
-E         At index 1 diff: 0 != 1
+E         At index 1 diff: 1 != 0
 E         Use -v to get more diff
 
-tests\ffmpeg_filter_graph\test_filter_node.py:103: AssertionError
-__________________ TestFilterNode.test_multi_pad_connections __________________
-
-self = <tests.ffmpeg_filter_graph.test_filter_node.TestFilterNode object at 0x00000209BFAB8280>
-
-    def test_multi_pad_connections(self):
-        """Test connections with multiple input/output pads."""
-        # Create nodes for testing multi-pad connections
-        # overlay takes two inputs: background and foreground
-        background = FilterNode('movie', 'background', {'filename': 'bg.mp4'})
-        foreground = FilterNode('movie', 'foreground', {'filename': 'fg.png'})
-        overlay = FilterNode('overlay', 'combine')
-    
-        # Connect background to overlay's first input
-        overlay.add_input(background, pad_index=0)
-    
-        # Connect foreground to overlay's second input
-        overlay.add_input(foreground, pad_index=1)
-    
-        # Verify both connections
-        assert len(overlay.inputs) == 2
-        assert overlay.inputs[0] == (background, 0)
->       assert overlay.inputs[1] == (foreground, 1)
-E       assert (<audiovisual...9BFB453F0>, 0) == (<audiovisual...9BFB453F0>, 1)
-E         
-E         At index 1 diff: 0 != 1
-E         Use -v to get more diff
-
-tests\ffmpeg_filter_graph\test_filter_node.py:150: AssertionError
+tests\ffmpeg_filter_graph\test_filter_node.py:105: AssertionError
 _________ TestFilterNode.test_label_inheritance_from_connected_nodes __________
 
-self = <tests.ffmpeg_filter_graph.test_filter_node.TestFilterNode object at 0x00000209BFAB8880>
+self = <tests.ffmpeg_filter_graph.test_filter_node.TestFilterNode object at 0x0000024788A48700>
 
     def test_label_inheritance_from_connected_nodes(self):
         """Test label inheritance from connected nodes."""
@@ -209,7 +183,7 @@ self = <tests.ffmpeg_filter_graph.test_filter_node.TestFilterNode object at 0x00
 >       assert target2.get_input_label(2) == 'special_output'
 E       AssertionError: assert None == 'special_output'
 E        +  where None = get_input_label(2)
-E        +    where get_input_label = <audiovisualizer.ffmpeg_filter_graph.core.FilterNode object at 0x00000209BFB48CD0>.get_input_label
+E        +    where get_input_label = <audiovisualizer.ffmpeg_filter_graph.core.FilterNode object at 0x00000247889EB4F0>.get_input_label
 
 tests\ffmpeg_filter_graph\test_filter_node.py:255: AssertionError
 =========================== short test summary info ===========================
@@ -217,6 +191,5 @@ FAILED tests/ffmpeg_filter_graph/test_core.py::test_filter_node_connections
 FAILED tests/ffmpeg_filter_graph/test_filter_graph.py::TestFilterGraph::test_connect_method
 FAILED tests/ffmpeg_filter_graph/test_filter_graph.py::TestFilterGraph::test_complex_graph_structure_building
 FAILED tests/ffmpeg_filter_graph/test_filter_node.py::TestFilterNode::test_add_input_functionality
-FAILED tests/ffmpeg_filter_graph/test_filter_node.py::TestFilterNode::test_multi_pad_connections
 FAILED tests/ffmpeg_filter_graph/test_filter_node.py::TestFilterNode::test_label_inheritance_from_connected_nodes
-================= 6 failed, 34 passed, 19 deselected in 0.24s =================
+================= 5 failed, 35 passed, 19 deselected in 0.23s =================
