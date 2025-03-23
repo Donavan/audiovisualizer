@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent / 'src'))
 from audiovisualizer.ffmpeg_filter_graph.core import FilterNode, FilterGraph, _escape_param
 
 
+@pytest.mark.unit
 def test_escape_param():
     """Test parameter escaping for filter strings."""
     # Test numeric values
@@ -25,6 +26,7 @@ def test_escape_param():
     assert _escape_param("backslash\\") == "'backslash\\\\'"
 
 
+@pytest.mark.unit
 def test_filter_node_creation():
     """Test creating a filter node."""
     # Test with minimal parameters
@@ -43,6 +45,7 @@ def test_filter_node_creation():
     assert node2.params == params
 
 
+@pytest.mark.unit
 def test_filter_node_connections():
     """Test connecting filter nodes."""
     # Create two nodes
@@ -68,6 +71,7 @@ def test_filter_node_connections():
     assert node1.outputs[1] == (node3, 0)
 
 
+@pytest.mark.unit
 def test_filter_node_to_string():
     """Test converting filter node to string."""
     # Simple node
@@ -94,6 +98,7 @@ def test_filter_node_to_string():
     assert 'y=20' in filter_str
 
 
+@pytest.mark.unit
 def test_filter_graph_creation_and_connection():
     """Test creating and connecting nodes in a filter graph."""
     graph = FilterGraph()
@@ -122,6 +127,7 @@ def test_filter_graph_creation_and_connection():
     assert overlay_node.output_labels[0] == 'out'
 
 
+@pytest.mark.unit
 def test_filter_graph_to_string():
     """Test converting filter graph to string."""
     # Create a simple graph
@@ -147,6 +153,7 @@ def test_filter_graph_to_string():
             mock_to_string.assert_called_once_with(graph)
 
 
+@pytest.mark.unit
 def test_empty_filter_graph_to_string():
     """Test converting an empty filter graph to string."""
     graph = FilterGraph()
