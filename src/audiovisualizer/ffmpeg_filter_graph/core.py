@@ -46,8 +46,13 @@ class FilterNode:
     def add_input(self, source: Optional['FilterNode'], pad_index: int = 0, source_pad: int = 0) -> 'FilterNode':
         """Connect an input to this node."""
         if source:
-            self.inputs.append((source, pad_index))
-            source.outputs.append((self, source_pad))
+            # Store the correct pad indices for inputs and outputs
+            self.inputs.append((source, source_pad))
+            source.outputs.append((self, pad_index))
+        else:
+            # Handle external inputs (None source)
+            self.inputs.append((None, pad_index))
+
         return self
 
     def set_input_label(self, pad_index: int, label: str) -> 'FilterNode':
