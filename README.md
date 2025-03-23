@@ -1,15 +1,18 @@
 # AudioVisualizer
 
-A Python package for creating reactive audio-visual overlays for videos.
+A Python package for creating audio-reactive visual effects for videos.
+
+## Overview
+
+AudioVisualizer extracts audio features (like frequency bands and amplitude) and uses them to dynamically modify visual elements in videos, creating engaging audio-reactive effects.
 
 ## Features
 
-- Add logos and text overlays to videos
-- Flexible audio-reactive effects system
-- Multiple reaction types: scale, opacity, color, position
-- Independent control of each reaction aspect
-- React to audio features (amplitude, spectral features, etc.)
-- GPU-accelerated video export (when available)
+- Object-oriented FFmpeg filter graph representation
+- Overlay logos, text, and spectrum visualizations that react to audio
+- Clean builder API for creating complex filter graphs
+- Validation to catch errors before execution
+- Visualization tools for debugging filter graphs
 
 ## Installation
 
@@ -20,151 +23,136 @@ pip install audiovisualizer
 ## Quick Start
 
 ```python
-from audiovisualizer import AudioVisualOverlay
+from audiovisualizer import process_video
 
-# Create the overlay processor with input video
-overlay = AudioVisualOverlay("my_video.mp4")
+# Create a simple video with logo and text overlays
+process_video(
+    "input.mp4",
+    "output.mp4",
+    [
+        {
+            "type": "logo",
+            "path": "logo.png",
+            "x": 20,
+            "y": 20,
+            "scale": (100, 100),
+            "opacity": 0.8
+        },
+        {
+            "type": "text",
+            "text": "Hello World",
+            "font": "font.ttf",
+            "size": 36,
+            "color": "white",
+            "x": 20,
+            "y": 150
+        }
+    ]
+)
+```
 
-# Extract audio features for reactive elements
-overlay.extract_audio_features()
+## Using the Filter Graph API
 
-# Add a logo and make it react to the beat
-logo = overlay.add_logo(
-    logo_path="examples/test_assets/logo.png",
-    position="top-right",
-    size=0.15
+The new filter graph API provides a clean, object-oriented way to work with FFmpeg filter graphs:
+
+```python
+from audiovisualizer import AudioVisualizer, FilterGraph
+
+# Initialize the AudioVisualizer
+vis = AudioVisualizer()
+vis.load_media("input.mp4")
+
+# Create a filter graph
+graph = vis.create_filter_graph()
+
+# Create the initial format filter
+format_node = graph.create_node('format', 'main_format', {'pix_fmt': 'yuva420p'})
+graph.set_input('0:v', format_node)  # Connect to video input
+
+# Create a movie source for the logo
+movie_node = graph.create_node('movie', 'logo_source', {
+    'filename': 'logo.png'
+})
+
+# Scale the logo
+scale_node = graph.create_node('scale', 'logo_scale', {
+    'width': 100,
+    'height': 100
+})
+graph.connect(movie_node, scale_node)
+
+# Create overlay for the logo
+overlay_node = graph.create_node('overlay', 'logo_overlay', {
+    'x': 20,
+    'y': 20,
+    'format': 'rgb',
+    'shortest': 1
+})
+graph.connect(format_node, overlay_node, 0, 0)  # Main video to input 0
+graph.connect(scale_node, overlay_node, 0, 1)   # Logo to input 1
+
+# Set the output
+graph.set_output('out', overlay_node)
+
+# Process the video with the filter graph
+vis.process_with_filter_graph(graph, "output.mp4")
+```
+
+## Using the Filter Graph Builders
+
+The package includes builder utilities for common filter patterns:
+
+```python
+from audiovisualizer import AudioVisualizer
+from audiovisualizer.ffmpeg_filter_graph import FilterGraph
+from audiovisualizer.ffmpeg_filter_graph.builders import FilterGraphBuilder
+
+# Initialize
+vis = AudioVisualizer()
+vis.load_media("input.mp4")
+graph = FilterGraph()
+
+# Create a logo overlay
+input_node, logo_output = FilterGraphBuilder.create_logo_overlay(
+    graph,
+    logo_path="logo.png",
+    position=(20, 20),
+    scale=0.2,
+    opacity=0.8
 )
 
-# Add scale reaction - logo pulses with the beat
-logo.add_reaction(
-    reaction_type="scale",
-    feature="rms",  # reacts to overall volume
-    params={
-        "intensity": 0.3,
-        "min_scale": 1.0,
-        "max_scale": 1.3,
-        "smoothing": 0.2
-    }
-)
-
-# Add a text element with different reactions
-text = overlay.add_text(
-    text="AUDIO REACTIVE",
-    position="bottom-center",
-    fontsize=40,
+# Add text overlay after the logo
+text_input, text_output = FilterGraphBuilder.create_text_overlay(
+    graph,
+    text="Hello World",
+    font_path="font.ttf",
+    position=(20, 150),
+    size=36,
     color="white"
 )
 
-# Text opacity reaction - fades with audio
-text.add_reaction(
-    reaction_type="opacity",
-    feature="onsets",  # reacts to note onsets/beats
-    params={
-        "min_opacity": 0.3,
-        "max_opacity": 1.0
-    }
-)
+# Connect the logo output to the text input
+graph.connect(logo_output, text_input)
 
-# Text color reaction - changes color with frequency content
-text.add_reaction(
-    reaction_type="color",
-    feature="spectral_centroid",
-    params={
-        "color_map": [
-            (0.0, "#3366CC"),  # blue for low values
-            (0.5, "#FFFFFF"),  # white for mid values
-            (1.0, "#CC3366")  # pink for high values
-        ]
-    }
-)
+# Set up inputs and outputs
+graph.set_input("0:v", input_node)
+graph.set_output("out", text_output)
 
-# Process the video with all elements and reactions
-overlay.process()
-
-# Export the final video
-overlay.export("output_video.mp4")
+# Process the video
+vis.process_with_filter_graph(graph, "output.mp4")
 ```
 
-## Reaction Types
+## Visualizing Filter Graphs
 
-The new flexible reactivity system allows you to add multiple reactions to each element:
+The package includes tools for visualizing filter graphs:
 
-### Scale Reaction
-Makes elements grow/shrink based on audio features:
 ```python
-element.add_reaction(
-    reaction_type="scale",
-    feature="rms",
-    params={
-        "min_scale": 1.0,
-        "max_scale": 1.5,
-        "smoothing": 0.3
-    }
-)
+from audiovisualizer.ffmpeg_filter_graph.visualizers import FilterGraphVisualizer
+
+# Visualize the graph (requires graphviz package)
+dot = FilterGraphVisualizer.visualize(graph, "filter_graph")
+print(f"Graph visualization saved to filter_graph.dot")
 ```
-
-### Opacity Reaction
-Changes element transparency based on audio features:
-```python
-element.add_reaction(
-    reaction_type="opacity",
-    feature="onsets",
-    params={
-        "min_opacity": 0.3,
-        "max_opacity": 1.0,
-        "smoothing": 0.4
-    }
-)
-```
-
-### Color Reaction
-Changes element color/saturation based on audio features:
-```python
-element.add_reaction(
-    reaction_type="color",
-    feature="spectral_centroid",
-    params={
-        "type": "saturation",  # or "contrast" for logos
-        "min_value": 0.8,
-        "max_value": 1.5
-    }
-)
-
-# For text, you can use color mapping:
-text.add_reaction(
-    reaction_type="color",
-    feature="spectral_centroid",
-    params={
-        "color_map": [
-            (0.0, "blue"),
-            (0.5, "white"),
-            (1.0, "red")
-        ]
-    }
-)
-```
-
-### Position Reaction
-Makes elements move based on audio features:
-```python
-element.add_reaction(
-    reaction_type="position",
-    feature="rms",
-    params={
-        "type": "bounce",  # or "shake" 
-        "intensity": 15  # pixels
-    }
-)
-```
-
-## Audio Features
-
-The following audio features can be used for reactive elements:
-
-- `rms`: Root mean square energy (amplitude/volume)
-- `onsets`: Onset strength (beat detection)
-- `spectral_centroid`: Brightness of sound (frequency content)
-- `mfcc`: Mel-frequency cepstral coefficients (timbre)
 
 ## License
 
