@@ -117,10 +117,10 @@ class AudioVisualizer:
         self.ffmpeg.process_video(self.input_path, output_path, filter_chain, extra_args)
         
         return output_path
-    
+
     def save_config(self, path: str) -> None:
         """Save the current configuration to a file.
-        
+
         Args:
             path: Path to save the configuration
         """
@@ -128,10 +128,11 @@ class AudioVisualizer:
             'input_path': self.input_path,
             'effects': self.effects,
         }
-        
+
         with open(path, 'w') as f:
-            json.dump(config, f, indent=2)
-            
+            json_str = json.dumps(config, indent=2)
+            f.write(json_str)
+
         logger.info(f"Configuration saved to {path}")
     
     def load_config(self, path: str) -> 'AudioVisualizer':
