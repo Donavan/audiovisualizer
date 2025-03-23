@@ -142,7 +142,7 @@ def test_save_and_load_config():
             
             # Check that json.dump was called with the right data
             call_args = mock_file.write.call_args[0][0] 
-            assert '"input_path": "input.mp4"' in call_args or \"'input_path': 'input.mp4'\" in call_args
+            assert '"input_path": "input.mp4"' in call_args or "'input_path': 'input.mp4'" in call_args
             assert '"effects"' in call_args or "'effects'" in call_args
         
         # Test loading config
