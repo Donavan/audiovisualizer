@@ -159,19 +159,25 @@ class FilterGraph:
     def _validate_structure(self) -> List[str]:
         """Validate the overall graph structure."""
         errors = []
-        
         # Check for cycles (would happen during topological sort if present)
         try:
             from .converters import FilterGraphConverter
             FilterGraphConverter._topological_sort(self)
         except ValueError as e:
             errors.append(str(e))
-            
+
         # Check that all nodes have at least one input or are connected to an external input
         for node in self.nodes:
-            if not node.inputs and not any(node == input_node for input_node, _ in self.inputs.values()):
-                # Skip source nodes like 'movie' which don't require inputs
-                if self.registry.get_filter_metadata(node.filter_type).get('min_inputs', 0) > 0:
-                    errors.append(f"Node '{node.label}' has no inputs and is not connected to an external input")
-            
+            metadata = self.registry.get_filter_metadata(node.filter_type) or {}
+            min_inputs = metadata.get('min_inputs', 0)
+
+            if min_inputs > 0 and not node.inputs and not any(node == input_node for input_node, _ in self.inputs.values()):
+                errors.append(f"Node '{node.label}' has no inputs and is not connected to an external input")
+
+            # Check that nodes with maximum inputs don't exceed it
+            max_inputs = metadata.get('max_inputs', float('inf'))
+
+            if len(node.inputs) > max_inputs:
+                errors.append(f"Node '{node.label}' has {len(node.inputs)} inputs but max allowed is {max_inputs}")
+
         return errors
