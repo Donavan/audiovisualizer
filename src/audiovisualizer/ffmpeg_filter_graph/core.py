@@ -46,12 +46,12 @@ class FilterNode:
     def add_input(self, source: Optional['FilterNode'], pad_index: int = 0, source_pad: int = 0) -> 'FilterNode':
         """Connect an input to this node."""
         if source:
-            # Store the correct pad indices for inputs and outputs
-            self.inputs.append((source, source_pad))
-            source.outputs.append((self, pad_index))
+            # Store the connection information correctly
+            self.inputs.append((source, pad_index))  # Which source node and which pad on THIS node to use
+            source.outputs.append((self, source_pad))  # Tell source node it's connected to us from its output pad
         else:
             # Handle external inputs (None source)
-            self.inputs.append((None, pad_index))
+            self.inputs.append((None, pad_index))  # Store the input pad index for this external input
 
         return self
 
@@ -116,7 +116,7 @@ class FilterGraph:
 
     def connect(self, source: FilterNode, target: FilterNode, source_pad: int = 0, target_pad: int = 0) -> 'FilterGraph':
         """Connect two nodes in the graph."""
-        target.add_input(source, target_pad, source_pad)
+        target.add_input(source, pad_index=target_pad, source_pad=source_pad)
         return self
 
     def set_input(self, label: str, node: FilterNode, pad: int = 0) -> 'FilterGraph':
